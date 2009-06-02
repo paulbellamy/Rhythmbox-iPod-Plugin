@@ -58,6 +58,10 @@ RBBrowserSource *	rb_mtp_source_new		(RBShell *shell, LIBMTP_mtpdevice_t *device
 GType			rb_mtp_source_get_type		(void);
 GType			rb_mtp_source_register_type	(GTypeModule *module);
 
+void			rb_mtp_source_show_properties	(RBMtpSource *source);
+
+void			rb_mtp_source_sync		(RBMtpSource *mtp_source);
+
 G_END_DECLS
 
 #endif /* __RB_MTP_SOURCE_H */

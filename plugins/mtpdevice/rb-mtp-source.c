@@ -44,6 +44,7 @@
 #include "rb-util.h"
 #include "rb-refstring.h"
 #include "rhythmdb.h"
+#include "rb-encoder.h"
 #include "rb-dialog.h"
 #include "rb-shell-player.h"
 #include "rb-player.h"
@@ -128,6 +129,22 @@ static void artwork_notify_cb (RhythmDB *db,
 			       const char *property_name,
 			       const GValue *metadata,
 			       RBMtpSource *source);
+
+/**
+ * Commented out because there is no "Properties" pane for MTP devices
+ * yet, so these functions are unused. - Paul.B
+ *
+
+static gboolean impl_get_sync_auto (RBMtpSource *source);
+static void impl_set_sync_auto (RBMtpSource *source,
+				gboolean value);
+static gboolean impl_get_sync_music (RBMtpSource *source);
+static void impl_set_sync_music (RBMtpSource *source,
+				 gboolean value);
+static gboolean impl_get_sync_podcasts (RBMtpSource *source);
+static void impl_set_sync_podcasts (RBMtpSource *source,
+				    gboolean value);
+*/
 
 static void add_track_to_album (RBMtpSource *source, const char *album_name, LIBMTP_track_t *track);
 
@@ -947,6 +964,7 @@ impl_get_ui_actions (RBSource *source)
 	GList *actions = NULL;
 
 	actions = g_list_prepend (actions, g_strdup ("MTPSourceEject"));
+	actions = g_list_prepend (actions, g_strdup ("MTPSourceSync"));
 
 	return actions;
 }
@@ -963,6 +981,51 @@ get_db_for_source (RBMtpSource *source)
 
 	return db;
 }
+
+/**
+ * Commented out because there is no "Properties" pane for MTP devices
+ * yet, so these functions are unused. - Paul.B
+ *
+
+static gboolean
+impl_get_sync_auto (RBMtpSource *source)
+{
+	// STUB
+	return FALSE;
+}
+
+static void
+impl_set_sync_auto (RBMtpSource *source, gboolean value)
+{
+	// STUB
+}
+
+static gboolean
+impl_get_sync_music (RBMtpSource *source)
+{
+	// STUB
+	return FALSE;
+}
+
+static void
+impl_set_sync_music (RBMtpSource *source, gboolean value)
+{
+	// STUB
+}
+
+static gboolean
+impl_get_sync_podcasts (RBMtpSource *source)
+{
+	// STUB
+	return FALSE;
+}
+
+static void
+impl_set_sync_podcasts (RBMtpSource *source, gboolean value)
+{
+	// STUB
+}
+*/
 
 static LIBMTP_track_t *
 transfer_track (RBMtpSource *source,
@@ -1150,6 +1213,133 @@ artwork_notify_cb (RhythmDB *db,
 	albumart->data = NULL;
 	LIBMTP_destroy_filesampledata_t (albumart);
 	g_free (image_data);
+}
+
+void
+rb_mtp_source_show_properties (RBMtpSource *source)
+{
+	/* FIXME: Copied from the rb-ipod-source.c
+	 * Not converted for MTP yet
+	 */
+	/*
+	GtkBuilder *builder;
+	GObject *dialog;
+	GObject *label;
+	char *text;
+	const gchar *mp;
+	char *used;
+	char *capacity;
+	char *builder_file;
+ 	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	Itdb_Device *dev;
+	RBPlugin *plugin;
+
+	if (priv->ipod_db == NULL) {
+		rb_debug ("can't show device properties with no device db");
+		return;
+	}
+
+	ipod_dev = rb_ipod_db_get_device (priv->ipod_db);
+
+	g_object_get (source, "plugin", &plugin, NULL);
+	builder_file = rb_plugin_find_file (plugin, "ipod-info.ui");
+	g_object_unref (plugin);
+
+	if (builder_file == NULL) {
+		g_warning ("Couldn't find ipod-info.ui");
+		return;
+	}
+
+	builder = rb_builder_load (builder_file, NULL);
+	g_free (builder_file);
+
+ 	if (builder == NULL) {
+ 		rb_debug ("Couldn't load ipod-info.ui");
+ 		return;
+ 	}
+	
+ 	dialog = gtk_builder_get_object (builder, "ipod-information");
+ 	g_signal_connect_object (dialog,
+ 				 "response",
+ 				 G_CALLBACK (rb_ipod_info_response_cb),
+ 				 source, 0);
+ 
+ 	label = gtk_builder_get_object (builder, "label-number-track-number");
+ 	text = g_strdup_printf ("%u", g_list_length (rb_ipod_db_get_tracks(priv->ipod_db) ));
+ 	gtk_label_set_text (GTK_LABEL (label), text);
+ 	g_free (text);
+ 
+ 	label = gtk_builder_get_object (builder, "entry-ipod-name");
+ 	gtk_entry_set_text (GTK_ENTRY (label), rb_ipod_db_get_ipod_name (priv->ipod_db));
+ 	g_signal_connect (label, "focus-out-event",
+ 			  (GCallback)ipod_name_changed_cb, source);
+ 
+ 	label = gtk_builder_get_object (builder, "label-number-playlist-number");
+ 	text = g_strdup_printf ("%u", g_list_length (rb_ipod_db_get_playlists (priv->ipod_db)));
+ 	gtk_label_set_text (GTK_LABEL (label), text);
+ 	g_free (text);
+ 
+ 	label = gtk_builder_get_object (builder, "label-mount-point-value");
+	mp = rb_ipod_db_get_mount_path (priv->ipod_db);
+ 	gtk_label_set_text (GTK_LABEL (label), mp);
+
+	label = gtk_builder_get_object (builder, "progressbar-ipod-usage");
+	used = g_format_size_for_display (rb_ipod_helpers_get_capacity (mp) - rb_ipod_helpers_get_free_space (mp));
+	capacity = g_format_size_for_display (rb_ipod_helpers_get_capacity(mp));
+	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (label), 
+				       (double)(rb_ipod_helpers_get_capacity (mp) - rb_ipod_helpers_get_free_space (mp))/(double)rb_ipod_helpers_get_capacity (mp));
+	*//* Translators: this is used to display the amount of storage space
+	 * used and the total storage space on an iPod.
+	 *//*
+	text = g_strdup_printf (_("%s of %s"), used, capacity);
+	gtk_progress_bar_set_text (GTK_PROGRESS_BAR (label), text);
+	g_free (text);
+	g_free (capacity);
+	g_free (used);
+	
+	*//* Not done with this, just a placeholder for now. -Paul B. *//*
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-auto");
+	// Needs to be on if rb_ipod_helpers_get_autosync
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_auto (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_auto_changed_cb, source);
+	
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-music");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_music (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_music_changed_cb, source);
+	
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-podcasts");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_podcasts (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_podcasts_changed_cb, source);
+
+	label = gtk_builder_get_object (builder, "label-device-node-value");
+	text = rb_ipod_helpers_get_device (RB_SOURCE(source));
+	gtk_label_set_text (GTK_LABEL (label), text);
+	g_free (text);
+
+ 	label = gtk_builder_get_object (builder, "label-ipod-model-value");
+ 	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "ModelNumStr"));
+
+ 	label = gtk_builder_get_object (builder, "label-database-version-value");
+	text = g_strdup_printf ("%u", rb_ipod_db_get_database_version (priv->ipod_db));
+ 	gtk_label_set_text (GTK_LABEL (label), text);
+	g_free (text);
+
+ 	label = gtk_builder_get_object (builder, "label-serial-number-value");
+	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "pszSerialNumber"));
+
+ 	label = gtk_builder_get_object (builder, "label-firmware-version-value");
+	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "VisibleBuildID"));
+
+ 	gtk_widget_show (GTK_WIDGET (dialog));
+
+	g_object_unref (builder);
+	*/
 }
 
 static void

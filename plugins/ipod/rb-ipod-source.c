@@ -92,6 +92,16 @@ static gboolean rb_ipod_song_artwork_add_cb (RhythmDB *db,
 
 static RhythmDB *get_db_for_source (RBiPodSource *source);
 
+static gboolean impl_get_sync_auto (RBiPodSource *source);
+static void impl_set_sync_auto (RBiPodSource *source,
+				gboolean value);
+static gboolean impl_get_sync_music (RBiPodSource *source);
+static void impl_set_sync_music (RBiPodSource *source,
+				 gboolean value);
+static gboolean impl_get_sync_podcasts (RBiPodSource *source);
+static void impl_set_sync_podcasts (RBiPodSource *source,
+				   gboolean value);
+
 struct _PlayedEntry {
 	RhythmDBEntry *entry;
 	guint play_count;
@@ -710,6 +720,51 @@ get_db_for_source (RBiPodSource *source)
 	return db;
 }
 
+static gboolean
+impl_get_sync_auto (RBiPodSource *source)
+{
+	/* FIXME: STUB
+	 */
+	return FALSE;
+}
+
+static void
+impl_set_sync_auto (RBiPodSource *source, gboolean value)
+{
+	/* FIXME: STUB
+	 */
+}
+
+static gboolean
+impl_get_sync_music (RBiPodSource *source)
+{
+	/* FIXME: STUB
+	 */
+	return FALSE;
+}
+
+static void
+impl_set_sync_music (RBiPodSource *source, gboolean value)
+{
+	/* FIXME: STUB
+	 */
+}
+
+static gboolean
+impl_get_sync_podcasts (RBiPodSource *source)
+{
+	/* FIXME: STUB
+	 */
+	return FALSE;
+}
+
+static void
+impl_set_sync_podcasts (RBiPodSource *source, gboolean value)
+{
+	/* FIXME: STUB
+	 */
+}
+
 static gint
 compare_timestamps (gconstpointer a, gconstpointer b, gpointer data)
 {
@@ -955,6 +1010,7 @@ impl_get_ui_actions (RBSource *source)
 	GList *actions = NULL;
 
 	actions = g_list_prepend (actions, g_strdup ("RemovableSourceEject"));
+	actions = g_list_prepend (actions, g_strdup ("iPodSourceSync"));
 
 	return actions;
 }
@@ -1592,6 +1648,30 @@ ipod_name_changed_cb (GtkWidget     *widget,
 	return FALSE;
 }
 
+static void
+rb_ipod_sync_auto_changed_cb (GtkToggleButton *togglebutton,
+			     gpointer         user_data)
+{
+		impl_set_sync_auto (RB_IPOD_SOURCE (user_data),
+				   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
+}
+
+static void
+rb_ipod_sync_music_changed_cb (GtkToggleButton *togglebutton,
+			     gpointer         user_data)
+{
+		impl_set_sync_music (RB_IPOD_SOURCE (user_data),
+				   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
+}
+
+static void
+rb_ipod_sync_podcasts_changed_cb (GtkToggleButton *togglebutton,
+			     gpointer         user_data)
+{
+		impl_set_sync_podcasts (RB_IPOD_SOURCE (user_data),
+				   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
+}
+
 void
 rb_ipod_source_show_properties (RBiPodSource *source)
 {
@@ -1669,6 +1749,26 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	g_free (text);
 	g_free (capacity);
 	g_free (used);
+	
+	/* Not done with this, just a placeholder for now. -Paul B. */
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-auto");
+	// Needs to be on if rb_ipod_helpers_get_autosync
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_auto (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_auto_changed_cb, source);
+	
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-music");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_music (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_music_changed_cb, source);
+	
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-podcasts");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_podcasts (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_podcasts_changed_cb, source);
 
 	label = gtk_builder_get_object (builder, "label-device-node-value");
 	text = rb_ipod_helpers_get_device (RB_SOURCE(source));
@@ -1692,5 +1792,55 @@ rb_ipod_source_show_properties (RBiPodSource *source)
  	gtk_widget_show (GTK_WIDGET (dialog));
 
 	g_object_unref (builder);
+}
+
+void
+rb_ipod_source_sync (RBiPodSource *ipod_source)
+{
+	/* FIXME: this is a pretty ugly skeleton function.
+	 * 
+	 */
+	//GList	*to_add; // Files to go onto the iPod
+	//GList	*to_remove; // Files to be removed from the iPod
+	gint64	space_needed = 0; // in MBs
+ 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
+	
+	// Calculate How much Music needs transferring
+	if (impl_get_sync_music (ipod_source)) {
+		// Find differences between iPod and Library
+		
+		// Figure the size needed to transfer
+		
+	}
+	
+	// Calculate How much Podcasts need transferring
+	if (impl_get_sync_podcasts (ipod_source)) {
+		// Find podcast differences between iPod and Library
+		
+		// Figure the size needed to transfer
+		
+	}
+	
+	// Check we have enough space, on the iPod.
+	if (space_needed > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db))) {
+		//Not enough Space on Device
+	}
+	
+	if (impl_get_sync_music (ipod_source)) {
+		// Remove tracks on iPod, but not in library
+		
+	}
+	
+	if (impl_get_sync_podcasts (ipod_source)) {
+		// Remove podcasts on iPod, but not in library
+	}
+	
+	if (impl_get_sync_music (ipod_source)) {
+		// Transfer needed tracks from library to iPod
+	}
+	
+	if (impl_get_sync_podcasts (ipod_source)) {
+		// transfer needed podcasts from library to iPod
+	}
 }
 

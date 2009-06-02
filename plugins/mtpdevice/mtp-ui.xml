@@ -1,6 +1,8 @@
 <ui>
   <popup name="MTPSourcePopup">
+    <menuitem name="MTPSrcPopupSync" action="MTPSourceSync"/>
     <menuitem name="MTPSrcPopupRename" action="MTPSourceRename"/>
     <menuitem name="MTPSrcPopupEject" action="MTPSourceEject"/>
+    <menuitem name="MTPSrcPupupProperties" action="MTPSourceProperties"/>
   </popup>
 </ui>
