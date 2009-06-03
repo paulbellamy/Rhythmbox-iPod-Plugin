@@ -27,9 +27,11 @@
  *
  */
 
+
 #include "rb-shell.h"
-#include "rb-removable-media-source.h"
-#include "rhythmdb.h"
+//#include "rb-removable-media-source.h"
+#include "rb-media-player-source.h"
+//#include "rhythmdb.h"
 
 /* macro to create rb_media_player_source_get_type and set rb_media_player_source_parent_class */
 G_DEFINE_TYPE (RBMediaPlayerSource, rb_media_player_source, G_TYPE_OBJECT);
@@ -39,11 +41,11 @@ rb_media_player_source_constructor (GType			gtype,
 				    guint		n_properties,
 				    GObjectConstructParam *properties)
 {
-	Gobject *obj;
+	GObject *obj;
 	
 	{
 		/* Always chain up to the parent constructor */
-		RBMediaPlayerSourceClass *klass;
+		//RBMediaPlayerSourceClass *klass; // Commented cause it is unused for now
 		GObjectClass *parent_class;
 		parent_class = G_OBJECT_CLASS (rb_media_player_source_parent_class);
 		obj = parent_class->constructor(gtype, n_properties, properties);
@@ -55,7 +57,7 @@ rb_media_player_source_constructor (GType			gtype,
 }
 
 static void
-rb_media_player_class_init (RBMediaPlayerSourceClass *class)
+rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 {
 	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 	
@@ -67,3 +69,4 @@ rb_media_player_source_init (RBMediaPlayerSource *self)
 {
 	/* initialize the object */
 }
+

@@ -57,7 +57,8 @@ typedef struct
 	/* class members */
 } RBMediaPlayerSourceClass;
 
-
+/* used by RB_TYPE_MEDIA_PLAYER_SOURCE */
+GType			rb_media_player_source_get_type	(void);
 
 G_END_DECLS
 
