@@ -36,43 +36,30 @@
 
 G_BEGIN_DECLS
 
-#define RB_TYPE_MEDIA_PLAYER_SOURCE         (rb_media_player_source_get_type ())
-#define RB_MEDIA_PLAYER_SOURCE(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSource))
-#define RB_MEDIA_PLAYER_SOURCE_CLASS(k)     (G_TYPE_CHECK_CLASS_CAST((k), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourceClass))
-#define RB_IS_MEDIA_PLAYER_SOURCE(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), RB_TYPE_MEDIA_PLAYER_SOURCE))
-#define RB_IS_MEDIA_PLAYER_SOURCE_CLASS(k)  (G_TYPE_CHECK_CLASS_TYPE ((k), RB_TYPE_MEDIA_PLAYER_SOURCE))
-#define RB_MEDIA_PLAYER_SOURCE_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourceClass))
+#define RB_TYPE_MEDIA_PLAYER_SOURCE	(rb_media_player_get_type ())
+#define RB_MEDIA_PLAYER_SOURCE(obj)	(G_TYPE_CHECK_INSTANCE_CAST ((obj), RB_TYPE_MEDIA_PLAYER_SOURCE))
+#define RB_IS_MEDIA_PLAYER_SOURCE(obj)	(G_TYPE_CHECK_INSTANCE_TYPE ((obj), RB_TYPE_MEDIA_PLAYER_SOURCE))
+#define RB_MEDIA_PLAYER_SOURCE_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST ((klass), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourceClass))
+#define RB_IS_MEDIA_PLAYER_SOURCE_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE ((klass), RB_TYPE_MEDIA_PLAYER_SOURCE))
+#define RB_MEDIA_PLAYER_SOURCE_GET_CLASS(obj)	(G_TYPE_INSTANCE_GET_CLASS ((obj), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourceClass))
 
 typedef struct
 {
-	RBRemovableMediaSource parent;
+	RBRemovableMediaSource parent_instance;
+	
+	/* instance members */
 } RBMediaPlayerSource;
 
 typedef struct
 {
-	RBRemovableMediaSourceClass parent;
+	RBRemovableMediaSourceClass parent_class;
 	
-	GType	(*impl_get_type)	(void);
-	GType	(*impl_register_type)	(GTypeModule *module);
-	
-	void	(*impl_new_playlist)	(RBMediaPlayerSource *source);
-	void	(*impl_remove_playlist)	(RBMediaPlayerSource *source);
-	
-	void	(*impl_show_properties) (RBMediaPlayerSource *source);
-	void	(*impl_sync)		(RBMediaPlayerSource *source);
+	/* class members */
 } RBMediaPlayerSourceClass;
 
-GType			rb_media_player_source_get_type		(void);
-GType                   rb_media_player_source_register_type    (GTypeModule *module);
 
-void			rb_media_player_source_new_playlist	(RBMediaPlayerSource *source);
-void			rb_media_player_source_remove_playlist	(RBMediaPlayerSource *source,
-								 RBSource *source);
-
-void			rb_media_player_source_show_properties	(RBMediaPlayerSource *source);
-
-void			rb_media_player_source_sync		(RBMediaPlayerSource *ipod_source);
 
 G_END_DECLS
 
-#endif /* __RB_MEDIA_PLAYER_SOURCE_H */
+#endif
+
