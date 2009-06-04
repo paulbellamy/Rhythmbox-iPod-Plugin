@@ -1800,47 +1800,75 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	/* FIXME: this is a pretty ugly skeleton function.
 	 * 
 	 */
-	//GList	*to_add; // Files to go onto the iPod
-	//GList	*to_remove; // Files to be removed from the iPod
-	gint64	space_needed = 0; // in MBs
+	GList	*to_add = NULL; // Files to go onto the iPod
+	GList	*to_remove = NULL; // Files to be removed from the iPod
+	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
+	gint64	space_needed_podcasts = 0; // in MBs
  	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
+ 	gpointer ptr_lib_track = NULL;
+ 	gpointer ptr_ipod_track = NULL;
 	
 	// Calculate How much Music needs transferring
 	if (impl_get_sync_music (ipod_source)) {
-		// Find differences between iPod and Library
-		
+		// Find differences between iPod and Itenerary
 		// Figure the size needed to transfer
 		
+		/* FIXME: This is not correct! Just here to illustrate the idea!
+		 *  If the lists are sorted alphabetically we can go through and
+		 *  pick out any differences.
+		while (ptr_lib_track != NULL && ptr_ipod_track != NULL) {
+			if (strcmp (ptr_lib_track->name, ptr_ipod_track->name) == 0) {
+				// Tracks are equivalent move with both ptrs
+				ptr_lib_track++;
+				ptr_ipod_track++;
+			} else if (strcmp (ptr_lib_track->name, ptr_ipod_track->name) < 0 ) {
+				// Item is in itinerary, but not on ipod
+				to_add = g_list_append(to_add, ptr_lib_track);
+				space_needed_music += sizeof(ptr_lib_track);
+				ptr_lib_track++;
+			} else {
+				// Item is on ipod but not in itinerary
+				to_remove = g_list_append(to_remove, ptr_ipod_track);
+				space_needed_music -= sizeof(ptr_ipod_track);
+				ptr_ipod_track++;
+			}
+		}
+		*/
 	}
 	
 	// Calculate How much Podcasts need transferring
 	if (impl_get_sync_podcasts (ipod_source)) {
-		// Find podcast differences between iPod and Library
-		
+		// Find podcast differences between iPod and Itinerary
 		// Figure the size needed to transfer
-		
+		// FIXME: This needs to be similar to the above, but for podcasts
 	}
 	
 	// Check we have enough space, on the iPod.
 	if (space_needed > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db))) {
-		//Not enough Space on Device
+		//Not enough Space on Device throw up an error
 	}
 	
 	if (impl_get_sync_music (ipod_source)) {
-		// Remove tracks on iPod, but not in library
+		// Remove tracks on iPod, but not in itinerary
 		
 	}
 	
 	if (impl_get_sync_podcasts (ipod_source)) {
-		// Remove podcasts on iPod, but not in library
+		// Remove podcasts on iPod, but not in itinerary
 	}
 	
+	// Done with this list, clear it.
+	g_list_free( to_remove );
+	
 	if (impl_get_sync_music (ipod_source)) {
-		// Transfer needed tracks from library to iPod
+		// Transfer needed tracks from itinerary to iPod
 	}
 	
 	if (impl_get_sync_podcasts (ipod_source)) {
-		// transfer needed podcasts from library to iPod
+		// transfer needed podcasts from itinerary to iPod
 	}
+	
+	// Done with this list, clear it.
+	g_list_free( to_add );
 }
 
