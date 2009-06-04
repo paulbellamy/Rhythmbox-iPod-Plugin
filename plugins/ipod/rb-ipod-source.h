@@ -31,7 +31,7 @@
 #define __RB_IPOD_SOURCE_H
 
 #include "rb-shell.h"
-#include "rb-removable-media-source.h"
+#include "rb-media-player-source.h"
 #include "rhythmdb.h"
 #include "rb-plugin.h"
 
@@ -46,15 +46,15 @@ G_BEGIN_DECLS
 
 typedef struct
 {
-	RBRemovableMediaSource parent;
+	RBMediaPlayerSource parent;
 } RBiPodSource;
 
 typedef struct
 {
-	RBRemovableMediaSourceClass parent;
+	RBMediaPlayerSourceClass parent;
 } RBiPodSourceClass;
 
-RBRemovableMediaSource *rb_ipod_source_new		(RBPlugin *plugin,
+RBRemovableMediaSource	*rb_ipod_source_new		(RBPlugin *plugin,
 							 RBShell *shell,
                                                          GMount *mount);
 GType			rb_ipod_source_get_type		(void);
