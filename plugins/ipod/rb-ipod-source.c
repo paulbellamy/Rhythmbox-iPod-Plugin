@@ -1805,8 +1805,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
  	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
- 	gpointer ptr_lib_track = NULL;
- 	gpointer ptr_ipod_track = NULL;
+ 	//gpointer ptr_lib_track = NULL; // Unused yet
+ 	//gpointer ptr_ipod_track = NULL;// Unused yet
 	
 	// Calculate How much Music needs transferring
 	if (impl_get_sync_music (ipod_source)) {
@@ -1844,7 +1844,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	}
 	
 	// Check we have enough space, on the iPod.
-	if (space_needed > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db))) {
+	if ((space_needed_music + space_needed_podcasts) > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db))) {
 		//Not enough Space on Device throw up an error
 	}
 	
