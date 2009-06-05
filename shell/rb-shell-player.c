@@ -152,7 +152,7 @@ static void rb_shell_player_property_row_activated_cb (RBPropertyView *view,
 static void rb_shell_player_sync_volume (RBShellPlayer *player, gboolean notify, gboolean set_volume);
 static void rb_shell_player_sync_replaygain (RBShellPlayer *player,
                                              RhythmDBEntry *entry);
-static void tick_cb (RBPlayer *player, RhythmDBEntry *entry, long elapsed, long duration, gpointer data);
+static void tick_cb (RBPlayer *player, RhythmDBEntry *entry, gint64 elapsed, gint64 duration, gpointer data);
 static void error_cb (RBPlayer *player, RhythmDBEntry *entry, const GError *err, gpointer data);
 static void missing_plugins_cb (RBPlayer *player, RhythmDBEntry *entry, const char **details, const char **descriptions, RBShellPlayer *sp);
 static void playing_stream_cb (RBPlayer *player, RhythmDBEntry *entry, RBShellPlayer *shell_player);
@@ -177,8 +177,6 @@ static void gconf_song_position_slider_visibility_changed (GConfClient *client, 
 							   GConfEntry *entry, RBShellPlayer *player);
 static void gconf_track_transition_time_changed (GConfClient *client, guint cnxn_id,
 						 GConfEntry *entry, RBShellPlayer *player);
-static void gconf_track_transition_album_check_changed (GConfClient *client, guint cnxn_id,
-							GConfEntry *entry, RBShellPlayer *player);
 static void gconf_network_buffer_size_changed (GConfClient *client, guint cnxn_id,
 					       GConfEntry *entry, RBShellPlayer *player);
 static void rb_shell_player_playing_changed_cb (RBShellPlayer *player,
@@ -220,14 +218,8 @@ static RBPlayOrder* rb_play_order_new (RBShellPlayer *player, const char* porder
 
 #define CONF_STATE		CONF_PREFIX "/state"
 
-/* number of seconds before the end of a track to start prerolling the next */
-#define PREROLL_TIME		2
-
-typedef enum {
-	STOP_CURRENT = 0,
-	CROSSFADE,
-	WAIT_EOS
-} PlaybackStartType;
+/* number of nanoseconds before the end of a track to start prerolling the next */
+#define PREROLL_TIME		RB_PLAYER_SECOND
 
 struct RBShellPlayerPrivate
 {
@@ -254,8 +246,7 @@ struct RBShellPlayerPrivate
 	RBPlayer *mmplayer;
 
 	guint elapsed;
-	gint track_transition_time;
-	gboolean track_transition_album_check;
+	gint64 track_transition_time;
 	RhythmDBEntry *playing_entry;
 	gboolean playing_entry_eos;
 	gboolean jump_to_playing_entry;
@@ -271,7 +262,6 @@ struct RBShellPlayerPrivate
 	guint gconf_play_order_id;
 	guint gconf_song_position_slider_visibility_id;
 	guint gconf_track_transition_time_id;
-	guint gconf_track_transition_album_check_id;
 	guint gconf_network_buffer_size_id;
 
 	gboolean mute;
@@ -310,6 +300,7 @@ enum
 	PLAYING_URI_CHANGED,
 	PLAYING_SONG_PROPERTY_CHANGED,
 	MISSING_PLUGINS,
+	ELAPSED_NANO_CHANGED,
 	LAST_SIGNAL
 };
 
@@ -611,6 +602,26 @@ rb_shell_player_class_init (RBShellPlayerClass *klass)
 			      3,
 			      G_TYPE_STRV, G_TYPE_STRV, G_TYPE_CLOSURE);
 
+	/**
+	 * RBShellPlayer::elapsed-nano-changed:
+	 * @player: the #RBShellPlayer
+	 * @elapsed: the new playback position in nanoseconds
+	 *
+	 * Emitted when the playback position changes.  Only use this (as opposed to
+	 * elapsed-changed) when you require subsecond precision.  This signal will be
+	 * emitted multiple times per second.
+	 */
+	rb_shell_player_signals[ELAPSED_NANO_CHANGED] =
+		g_signal_new ("elapsed-nano-changed",
+			      G_OBJECT_CLASS_TYPE (object_class),
+			      G_SIGNAL_RUN_LAST,
+			      G_STRUCT_OFFSET (RBShellPlayerClass, elapsed_nano_changed),
+			      NULL, NULL,
+			      rb_marshal_VOID__INT64,
+			      G_TYPE_NONE,
+			      1,
+			      G_TYPE_INT64);
+
 	g_type_class_add_private (klass, sizeof (RBShellPlayerPrivate));
 }
 
@@ -711,33 +722,13 @@ reemit_playing_signal (RBShellPlayer *player,
 		       rb_player_playing (player->priv->mmplayer));
 }
 
-static int
-rb_shell_player_get_crossfade (RBShellPlayer *player, PlaybackStartType play_type)
-{
-	switch (play_type) {
-	case STOP_CURRENT:
-		return -1;
-		break;
-	case CROSSFADE:
-		return player->priv->track_transition_time;
-		break;
-	case WAIT_EOS:
-		return 0;
-		break;
-	default:
-		g_assert_not_reached ();
-	}
-}
-
-
 static void
 rb_shell_player_open_playlist_url (RBShellPlayer *player,
 				   const char *location,
 				   RhythmDBEntry *entry,
-				   PlaybackStartType play_type)
+				   RBPlayerPlayType play_type)
 {
 	GError *error = NULL;
-	gint crossfade = rb_shell_player_get_crossfade (player, play_type);
 
 	rb_debug ("playing stream url %s", location);
 	rb_player_open (player->priv->mmplayer,
@@ -746,7 +737,7 @@ rb_shell_player_open_playlist_url (RBShellPlayer *player,
 			(GDestroyNotify) rhythmdb_entry_unref,
 			&error);
 	if (error == NULL)
-		rb_player_play (player->priv->mmplayer, crossfade, &error);
+		rb_player_play (player->priv->mmplayer, play_type, player->priv->track_transition_time, &error);
 
 	if (error) {
 		GDK_THREADS_ENTER ();
@@ -1008,15 +999,10 @@ rb_shell_player_init (RBShellPlayer *player)
 
 	player->priv->volume = eel_gconf_get_float (CONF_STATE_VOLUME);
 
-	player->priv->track_transition_time = (int)(eel_gconf_get_float (CONF_PLAYER_TRANSITION_TIME));
-	player->priv->track_transition_album_check = eel_gconf_get_boolean (CONF_PLAYER_TRANSITION_ALBUM_CHECK);
+	player->priv->track_transition_time = eel_gconf_get_float (CONF_PLAYER_TRANSITION_TIME) * RB_PLAYER_SECOND;
 	player->priv->gconf_track_transition_time_id =
 		eel_gconf_notification_add (CONF_PLAYER_TRANSITION_TIME,
 					    (GConfClientNotifyFunc) gconf_track_transition_time_changed,
-					    player);
-	player->priv->gconf_track_transition_album_check_id =
-		eel_gconf_notification_add (CONF_PLAYER_TRANSITION_ALBUM_CHECK,
-					    (GConfClientNotifyFunc) gconf_track_transition_album_check_changed,
 					    player);
 	player->priv->gconf_network_buffer_size_id =
 		eel_gconf_notification_add (CONF_PLAYER_NETWORK_BUFFER_SIZE,
@@ -1465,7 +1451,7 @@ typedef struct {
 	RBShellPlayer *player;
 	char *location;
 	RhythmDBEntry *entry;
-	PlaybackStartType play_type;
+	RBPlayerPlayType play_type;
 } OpenLocationThreadData;
 
 static void
@@ -1526,7 +1512,7 @@ open_location_thread (OpenLocationThreadData *data)
 static gboolean
 rb_shell_player_open_location (RBShellPlayer *player,
 			       RhythmDBEntry *entry,
-			       PlaybackStartType play_type,
+			       RBPlayerPlayType play_type,
 			       GError **error)
 {
 	char *location;
@@ -1568,13 +1554,10 @@ rb_shell_player_open_location (RBShellPlayer *player,
 
 		g_thread_create ((GThreadFunc)open_location_thread, data, FALSE, NULL);
 	} else {
-		gint crossfade;
-		crossfade = rb_shell_player_get_crossfade (player, play_type);
-
 		rhythmdb_entry_ref (entry);
 		ret = ret && rb_player_open (player->priv->mmplayer, location, entry, (GDestroyNotify) rhythmdb_entry_unref, error);
 
-		ret = ret && rb_player_play (player->priv->mmplayer, crossfade, error);
+		ret = ret && rb_player_play (player->priv->mmplayer, play_type, player->priv->track_transition_time, error);
 	}
 
 	g_free (location);
@@ -1606,7 +1589,7 @@ rb_shell_player_play (RBShellPlayer *player,
 		return TRUE;
 
 	/* we're obviously not playing anything, so crossfading is irrelevant */
-	if (!rb_player_play (player->priv->mmplayer, FALSE, error)) {
+	if (!rb_player_play (player->priv->mmplayer, RB_PLAYER_PLAY_REPLACE, 0.0f, error)) {
 		rb_debug ("player doesn't want to");
 		return FALSE;
 	}
@@ -1656,12 +1639,12 @@ rb_shell_player_set_playing_entry (RBShellPlayer *player,
 {
 	GError *tmp_error = NULL;
 	GValue val = {0,};
-	PlaybackStartType play_type;
+	RBPlayerPlayType play_type;
 
 	g_return_val_if_fail (player->priv->current_playing_source != NULL, TRUE);
 	g_return_val_if_fail (entry != NULL, TRUE);
 
-	play_type = wait_for_eos ? WAIT_EOS : STOP_CURRENT;
+	play_type = wait_for_eos ? RB_PLAYER_PLAY_AFTER_EOS : RB_PLAYER_PLAY_REPLACE;
 
 	if (out_of_order) {
 		RBPlayOrder *porder;
@@ -1675,23 +1658,18 @@ rb_shell_player_set_playing_entry (RBShellPlayer *player,
 
 	if (player->priv->playing_entry != NULL &&
 	    player->priv->track_transition_time > 0) {
-		if (player->priv->track_transition_album_check) {
-			const char *previous_album;
-			const char *album;
+		const char *previous_album;
+		const char *album;
 
-			previous_album = rhythmdb_entry_get_string (player->priv->playing_entry, RHYTHMDB_PROP_ALBUM);
-			album = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM);
-			/* only crossfade if we're not going from the end of one song on an
-			 * album to the start of another.  "Unknown" doesn't count as an album.
-			 */
-			if (wait_for_eos == FALSE ||
-			    strcmp (album, _("Unknown")) == 0 ||
-			    strcmp (album, previous_album) != 0) {
-				play_type = CROSSFADE;
-			}
-		} else {
-			/* always crossfade */
-			play_type = CROSSFADE;
+		previous_album = rhythmdb_entry_get_string (player->priv->playing_entry, RHYTHMDB_PROP_ALBUM);
+		album = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM);
+		/* only crossfade if we're not going from the end of one song on an
+		 * album to the start of another.  "Unknown" doesn't count as an album.
+		 */
+		if (wait_for_eos == FALSE ||
+		    strcmp (album, _("Unknown")) == 0 ||
+		    strcmp (album, previous_album) != 0) {
+			play_type = RB_PLAYER_PLAY_CROSSFADE;
 		}
 	}
 
@@ -2006,7 +1984,7 @@ rb_shell_player_do_previous (RBShellPlayer *player,
 	 */
 	if (player->priv->current_playing_source != NULL
 	    && rb_source_can_pause (player->priv->source)
-	    && rb_player_get_time (player->priv->mmplayer) > 3) {
+	    && rb_player_get_time (player->priv->mmplayer) > (G_GINT64_CONSTANT (3) * RB_PLAYER_SECOND)) {
 		rb_debug ("after 3 second previous, restarting song");
 		rb_player_set_time (player->priv->mmplayer, 0);
 		rb_shell_player_sync_with_source (player);
@@ -2911,7 +2889,7 @@ rb_shell_player_sync_with_source (RBShellPlayer *player)
 	char *streaming_artist = NULL;
 	RhythmDBEntry *entry;
 	char *title = NULL;
-	long elapsed;
+	gint64 elapsed;
 
 	entry = rb_shell_player_get_playing_entry (player);
 	rb_debug ("playing source: %p, active entry: %p", player->priv->current_playing_source, entry);
@@ -2969,7 +2947,7 @@ rb_shell_player_sync_with_source (RBShellPlayer *player)
 	elapsed = rb_player_get_time (player->priv->mmplayer);
 	if (elapsed < 0)
 		elapsed = 0;
-	player->priv->elapsed = elapsed;
+	player->priv->elapsed = elapsed / RB_PLAYER_SECOND;
 
 	g_signal_emit (G_OBJECT (player), rb_shell_player_signals[WINDOW_TITLE_CHANGED], 0,
 		       title);
@@ -3273,7 +3251,7 @@ rb_shell_player_get_playing_time (RBShellPlayer *player,
 	ptime = rb_player_get_time (player->priv->mmplayer);
 	if (ptime >= 0) {
 		if (time != NULL) {
-			*time = (guint)ptime;
+			*time = (guint)(ptime / RB_PLAYER_SECOND);
 		}
 		return TRUE;
 	} else {
@@ -3306,7 +3284,7 @@ rb_shell_player_set_playing_time (RBShellPlayer *player,
 			rb_debug ("forgetting that playing entry had EOS'd due to seek");
 			player->priv->playing_entry_eos = FALSE;
 		}
-		rb_player_set_time (player->priv->mmplayer, (long) time);
+		rb_player_set_time (player->priv->mmplayer, ((gint64) time) * RB_PLAYER_SECOND);
 		return TRUE;
 	} else {
 		g_set_error (error,
@@ -3331,10 +3309,10 @@ rb_shell_player_seek (RBShellPlayer *player, long offset)
 	g_return_if_fail (RB_IS_SHELL_PLAYER (player));
 
 	if (rb_player_seekable (player->priv->mmplayer)) {
-		long t = rb_player_get_time (player->priv->mmplayer);
+		gint64 t = rb_player_get_time (player->priv->mmplayer);
 		if (t < 0)
 			t = 0;
-		rb_player_set_time (player->priv->mmplayer, t + offset);
+		rb_player_set_time (player->priv->mmplayer, t + (offset * RB_PLAYER_SECOND));
 	}
 }
 
@@ -3507,14 +3485,15 @@ error_cb (RBPlayer *mmplayer,
 static void
 tick_cb (RBPlayer *mmplayer,
 	 RhythmDBEntry *entry,
-	 long elapsed,
-	 long duration,
+	 gint64 elapsed,
+	 gint64 duration,
 	 gpointer data)
 {
  	RBShellPlayer *player = RB_SHELL_PLAYER (data);
-	gint remaining_check = 0;
+	gint64 remaining_check = 0;
 	gboolean duration_from_player = TRUE;
 	const char *uri;
+	long elapsed_sec;
 
 	GDK_THREADS_ENTER ();
 
@@ -3528,35 +3507,37 @@ tick_cb (RBPlayer *mmplayer,
 	 * value from the entry, if any.
 	 */
 	if (duration < 1) {
-		duration = rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_DURATION);
+		duration = rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_DURATION) * RB_PLAYER_SECOND;
 		duration_from_player = FALSE;
 	}
 
 	uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
-	rb_debug ("tick: [%s, %lu:%lu(%d)]",
+	rb_debug ("tick: [%s, %" G_GINT64_FORMAT ":%" G_GINT64_FORMAT "(%d)]",
 		  uri,
 		  elapsed,
 		  duration,
 		  duration_from_player);
 
-	if (TRUE /* rb_player_playing (mmplayer)*/) {		/* why do we care whether it's playing or not? */
-		if (elapsed < 0)
-			elapsed = 0;
+	if (elapsed < 0) {
+		elapsed_sec = 0;
+	} else {
+		elapsed_sec = elapsed / RB_PLAYER_SECOND;
+	}
 
-		if (player->priv->elapsed != elapsed) {
-			player->priv->elapsed = elapsed;
-			g_signal_emit (G_OBJECT (player), rb_shell_player_signals[ELAPSED_CHANGED],
-				       0, player->priv->elapsed);
-		}
+	if (player->priv->elapsed != elapsed_sec) {
+		player->priv->elapsed = elapsed_sec;
+		g_signal_emit (G_OBJECT (player), rb_shell_player_signals[ELAPSED_CHANGED],
+			       0, player->priv->elapsed);
+	}
+	g_signal_emit (player, rb_shell_player_signals[ELAPSED_NANO_CHANGED], 0, elapsed);
 
-		if (duration_from_player) {
-			/* XXX update duration in various things? */
-		}
+	if (duration_from_player) {
+		/* XXX update duration in various things? */
 	}
 
 	/* check if we should start a crossfade */
 	if (rb_player_multiple_open (mmplayer)) {
-		if (player->priv->track_transition_time == 0) {
+		if (player->priv->track_transition_time < PREROLL_TIME) {
 			remaining_check = PREROLL_TIME;
 		} else {
 			remaining_check = player->priv->track_transition_time;
@@ -3565,15 +3546,17 @@ tick_cb (RBPlayer *mmplayer,
 
 	/*
 	 * just pretending we got an EOS will do exactly what we want
-	 * here.  for the album crossfade case, it might mean we leave
-	 * the stream prerolled for a few extra seconds, in which time
-	 * something interesting (file being deleted?) might happen.
+	 * here.  if we don't want to crossfade, we'll just leave the stream
+	 * prerolled until the current stream really ends.
 	 */
 	if (remaining_check > 0 &&
 	    duration > 0 &&
 	    elapsed > 0 &&
 	    ((duration - elapsed) <= remaining_check)) {
-		rb_debug ("%ld seconds remaining in stream %s; need %d for transition", duration - elapsed, uri, remaining_check);
+		rb_debug ("%" G_GINT64_FORMAT " ns remaining in stream %s; need %" G_GINT64_FORMAT " for transition",
+			  duration - elapsed,
+			  uri,
+			  remaining_check);
 		rb_shell_player_handle_eos_unlocked (player, entry, FALSE);
 	}
 
@@ -3802,17 +3785,7 @@ gconf_track_transition_time_changed (GConfClient *client,
 				     RBShellPlayer *player)
 {
 	rb_debug ("track transition time changed");
-	player->priv->track_transition_time = (int)(eel_gconf_get_float (CONF_PLAYER_TRANSITION_TIME));
-}
-
-static void
-gconf_track_transition_album_check_changed (GConfClient *client,
-					    guint cnxn_id,
-					    GConfEntry *entry,
-					    RBShellPlayer *player)
-{
-	rb_debug ("track transition album check flag changed");
-	player->priv->track_transition_album_check = eel_gconf_get_boolean (CONF_PLAYER_TRANSITION_ALBUM_CHECK);
+	player->priv->track_transition_time = eel_gconf_get_float (CONF_PLAYER_TRANSITION_TIME) * RB_PLAYER_SECOND;
 }
 
 static void
