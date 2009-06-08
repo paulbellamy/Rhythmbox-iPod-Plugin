@@ -40,46 +40,16 @@
 #include <gst/pbutils/pbutils.h>
 
 #include "rb-metadata.h"
+#include "rb-metadata-gst-common.h"
 #include "rb-debug.h"
 #include "rb-util.h"
 #include "rb-file-helpers.h"
 
 G_DEFINE_TYPE(RBMetaData, rb_metadata, G_TYPE_OBJECT)
 
+typedef GstElement *(*RBAddTaggerElem) (GstElement *pipeline, GstElement *source, GstTagList *tags);
+
 static void rb_metadata_finalize (GObject *object);
-
-typedef GstElement *(*RBAddTaggerElem) (RBMetaData *, GstElement *);
-
-/*
- * The list of mime-type prefixes for files that shouldn't display errors about being non-audio.
- * Useful for people who have cover art, et cetera, in their music directories
- */
-const char * ignore_mime_types[] = {
-	"image/",
-	"text/",
-	"application/",
-};
-
-const char * non_ignore_mime_types[] = {
-	"application/x-id3",
-	"application/ogg",
-	"application/x-apetag",
-	"application/x-3gp"
-};
-
-/*
- * File size below which we will simply ignore files that can't be identified.
- * This is mostly here so we ignore the various text files that are packaged
- * with many netlabel releases and other downloads.
- */
-#define REALLY_SMALL_FILE_SIZE	(4096)
-
-struct RBMetadataGstType
-{
-	char *mimetype;
-	RBAddTaggerElem tag_func;
-	char *human_name;
-};
 
 struct RBMetaDataPrivate
 {
@@ -92,11 +62,9 @@ struct RBMetaDataPrivate
 	gulong typefind_cb_id;
 	GstTagList *tags;
 
-	/* Array of RBMetadataGstType */
-	GPtrArray *supported_types;
+	GHashTable *taggers;
 
 	char *type;
-	gboolean handoff;
 	gboolean eos;
 	gboolean has_audio;
 	gboolean has_non_audio;
@@ -107,49 +75,20 @@ struct RBMetaDataPrivate
 
 #define RB_METADATA_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_METADATA, RBMetaDataPrivate))
 
-static void
-gst_date_gulong_transform (const GValue *src, GValue *dest)
-{
-	const GDate *date = gst_value_get_date (src);
-
-	g_value_set_ulong (dest, (date) ? g_date_get_julian (date) : 0);
-}
-
-static void
-gulong_gst_date_transform (const GValue *src, GValue *dest)
-{
-	gulong day = g_value_get_ulong (src);
-	GDate *date = g_date_new_julian (day);
-
-	gst_value_set_date (dest, date);
-	g_date_free (date);
-}
-
-static void
-rb_metadata_class_init (RBMetaDataClass *klass)
-{
-	GObjectClass *object_class = G_OBJECT_CLASS (klass);
-
-	object_class->finalize = rb_metadata_finalize;
-
-	g_type_class_add_private (klass, sizeof (RBMetaDataPrivate));
-	g_value_register_transform_func (GST_TYPE_DATE, G_TYPE_ULONG, gst_date_gulong_transform);
-	g_value_register_transform_func (G_TYPE_ULONG, GST_TYPE_DATE, gulong_gst_date_transform);
-}
 
 static GstElement *
-rb_add_flac_tagger (RBMetaData *md, GstElement *element)
+flac_tagger (GstElement *pipeline, GstElement *link_to, GstTagList *tags)
 {
 	GstElement *tagger = NULL;
 
-	if (!(tagger = gst_element_factory_make ("flactag", "flactag")))
+	tagger = gst_element_factory_make ("flactag", NULL);
+	if (tagger == NULL)
 		return NULL;
 
-	gst_bin_add (GST_BIN (md->priv->pipeline), tagger);
-	gst_element_link_many (element, tagger, NULL);
+	gst_bin_add (GST_BIN (pipeline), tagger);
+	gst_element_link_many (link_to, tagger, NULL);
 
-	gst_tag_setter_merge_tags (GST_TAG_SETTER (tagger), md->priv->tags, GST_TAG_MERGE_REPLACE_ALL);
-
+	gst_tag_setter_merge_tags (GST_TAG_SETTER (tagger), tags, GST_TAG_MERGE_REPLACE_ALL);
 	return tagger;
 }
 
@@ -160,66 +99,30 @@ id3_pad_added_cb (GstElement *demux, GstPad *pad, GstElement *mux)
 
 	mux_pad = gst_element_get_compatible_pad (mux, pad, NULL);
 	if (gst_pad_link (pad, mux_pad) != GST_PAD_LINK_OK)
-		rb_debug ("unable to link pad from id3demux to id3mux");
+		rb_debug ("unable to link pad from id3demux to id3v2mux");
 	else
-		rb_debug ("linked pad from id3de to id3mux");
-}
-
-static gboolean
-rb_gst_plugin_greater (const char *plugin, const char *element, gint major, gint minor, gint micro)
-{
-	const char *version;
-	GstPlugin *p;
-	guint i;
-	guint count;
-
-	if (gst_default_registry_check_feature_version (element, major, minor, micro + 1))
-		return TRUE;
-
-	if (!gst_default_registry_check_feature_version (element, major, minor, micro))
-		return FALSE;
-
-	p = gst_default_registry_find_plugin (plugin);
-	if (p == NULL)
-		return FALSE;
-
-	version = gst_plugin_get_version (p);
-
-	/* check if it's not a release */
-	count = sscanf (version, "%u.%u.%u.%u", &i, &i, &i, &i);
-	return (count > 3);
+		rb_debug ("linked pad from id3demux to id3v2mux");
 }
 
 static GstElement *
-rb_add_id3_tagger (RBMetaData *md, GstElement *element)
+id3_tagger (GstElement *pipeline, GstElement *link_to, GstTagList *tags)
 {
 	GstElement *demux = NULL;
 	GstElement *mux = NULL;
 
+	/* TODO use new id3tag element here; not sure what name it'll end up with though */
 	demux = gst_element_factory_make ("id3demux", NULL);
-
 	mux = gst_element_factory_make ("id3v2mux", NULL);
-	if (mux != NULL) {
-		/* check for backwards id3v2mux merge-mode */
-		if (!rb_gst_plugin_greater ("taglib", "id3v2mux", 0, 10, 3)) {
-			rb_debug ("using id3v2mux with backwards merge mode");
-			gst_tag_setter_set_tag_merge_mode (GST_TAG_SETTER (mux), GST_TAG_MERGE_REPLACE);
-		} else {
-			rb_debug ("using id3v2mux");
-		}
-	}
-
 	if (demux == NULL || mux == NULL)
 		goto error;
 
-	gst_bin_add_many (GST_BIN (md->priv->pipeline), demux, mux, NULL);
-	if (!gst_element_link (element, demux))
+	gst_bin_add_many (GST_BIN (pipeline), demux, mux, NULL);
+	if (!gst_element_link (link_to, demux))
 		goto error;
 
 	g_signal_connect (demux, "pad-added", (GCallback)id3_pad_added_cb, mux);
 
-	gst_tag_setter_merge_tags (GST_TAG_SETTER (mux), md->priv->tags, GST_TAG_MERGE_REPLACE_ALL);
-
+	gst_tag_setter_merge_tags (GST_TAG_SETTER (mux), tags, GST_TAG_MERGE_REPLACE_ALL);
 	return mux;
 
 error:
@@ -229,7 +132,7 @@ error:
 }
 
 static void
-ogg_pad_added_cb (GstElement *demux, GstPad *pad, RBMetaData *md)
+ogg_pad_added_cb (GstElement *demux, GstPad *pad, GstTagList *tags)
 {
 	GstCaps *caps;
 	GstStructure *structure;
@@ -276,7 +179,7 @@ ogg_pad_added_cb (GstElement *demux, GstPad *pad, RBMetaData *md)
 		conn_pad = gst_element_get_compatible_pad (tagger, pad, NULL);
 		gst_pad_link (pad, conn_pad);
 
-		gst_tag_setter_merge_tags (GST_TAG_SETTER (tagger), md->priv->tags, GST_TAG_MERGE_REPLACE_ALL);
+		gst_tag_setter_merge_tags (GST_TAG_SETTER (tagger), tags, GST_TAG_MERGE_REPLACE_ALL);
 	} else {
 		conn_pad = gst_element_get_compatible_pad (mux, pad, NULL);
 		gst_pad_link (pad, conn_pad);
@@ -288,7 +191,7 @@ end:
 }
 
 static GstElement *
-rb_add_ogg_tagger (RBMetaData *md, GstElement *element)
+vorbis_tagger (GstElement *pipeline, GstElement *link_to, GstTagList *tags)
 {
 	GstElement *demux = NULL;
 	GstElement *mux = NULL;
@@ -299,13 +202,12 @@ rb_add_ogg_tagger (RBMetaData *md, GstElement *element)
 	if (demux == NULL || mux == NULL)
 		goto error;
 
-	gst_bin_add_many (GST_BIN (md->priv->pipeline), demux, mux, NULL);
-	if (!gst_element_link (element, demux))
+	gst_bin_add_many (GST_BIN (pipeline), demux, mux, NULL);
+	if (!gst_element_link (link_to, demux))
 		goto error;
 
 	g_object_set_data (G_OBJECT (demux), "mux", mux);
-	g_signal_connect (demux, "pad-added", (GCallback)ogg_pad_added_cb, md);
-
+	g_signal_connect (demux, "pad-added", (GCallback)ogg_pad_added_cb, tags);
 	return mux;
 
 error:
@@ -315,7 +217,7 @@ error:
 }
 
 static void
-qt_pad_added_cb (GstElement *demux, GstPad *demuxpad, GstPad *muxpad)
+mp4_pad_added_cb (GstElement *demux, GstPad *demuxpad, GstPad *muxpad)
 {
 	if (gst_pad_link (demuxpad, muxpad) != GST_PAD_LINK_OK)
 		rb_debug ("unable to link pad from qtdemux to mp4mux");
@@ -325,7 +227,7 @@ qt_pad_added_cb (GstElement *demux, GstPad *demuxpad, GstPad *muxpad)
 
 
 static GstElement *
-rb_add_qt_tagger (RBMetaData *md, GstElement *element)
+mp4_tagger (GstElement *pipeline, GstElement *link_to, GstTagList *tags)
 {
 	GstElement *demux;
 	GstElement *mux;
@@ -336,14 +238,14 @@ rb_add_qt_tagger (RBMetaData *md, GstElement *element)
 	if (demux == NULL || mux == NULL)
 		goto error;
 
-	gst_bin_add_many (GST_BIN (md->priv->pipeline), demux, mux, NULL);
-	if (!gst_element_link (element, demux))
+	gst_bin_add_many (GST_BIN (pipeline), demux, mux, NULL);
+	if (!gst_element_link (link_to, demux))
 		goto error;
 
 	muxpad = gst_element_get_request_pad (mux, "audio_%d");
-	g_signal_connect (demux, "pad-added", G_CALLBACK (qt_pad_added_cb), muxpad);
-	
-	gst_tag_setter_merge_tags (GST_TAG_SETTER (mux), md->priv->tags, GST_TAG_MERGE_REPLACE_ALL);
+	g_signal_connect (demux, "pad-added", G_CALLBACK (mp4_pad_added_cb), muxpad);
+
+	gst_tag_setter_merge_tags (GST_TAG_SETTER (mux), tags, GST_TAG_MERGE_REPLACE_ALL);
 
 	return mux;
 
@@ -355,91 +257,73 @@ error:
 	return NULL;
 }
 
+
+
 static void
-add_supported_type (RBMetaData *md,
-		    const char *mime,
-		    RBAddTaggerElem add_tagger_func,
-		    const char *human_name)
+rb_metadata_class_init (RBMetaDataClass *klass)
 {
-	struct RBMetadataGstType *type = g_new0 (struct RBMetadataGstType, 1);
-	type->mimetype = g_strdup (mime);
-	type->tag_func = add_tagger_func;
-	type->human_name = g_strdup (human_name);
-	g_ptr_array_add (md->priv->supported_types, type);
+	GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+	object_class->finalize = rb_metadata_finalize;
+
+	g_type_class_add_private (klass, sizeof (RBMetaDataPrivate));
+	rb_metadata_gst_register_transforms ();
 }
 
 static void
 rb_metadata_init (RBMetaData *md)
 {
-	RBAddTaggerElem tagger;
-	gboolean has_giosink = FALSE;
-	gboolean has_id3 = FALSE;
-
 	md->priv = RB_METADATA_GET_PRIVATE (md);
 
-	md->priv->supported_types = g_ptr_array_new ();
+	md->priv->taggers = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, NULL);
 
- 	/* the list of supported types serves two purposes:
- 	 * - it knows how to construct elements for tag writing
- 	 * - it knows human-readable names for MIME types so we can say
- 	 *     "There is no plugin available to play WMV files"
- 	 *     rather than " .. play video/x-ms-asf files".
- 	 *
- 	 * only registering types we have plugins for defeats the second
-	 * purpose.
- 	 */
-	has_giosink = (gst_element_factory_find ("giostreamsink") != NULL);
-	has_id3 = (gst_element_factory_find ("id3v2mux") != NULL);
-	tagger = (has_giosink && has_id3) ?  rb_add_id3_tagger : NULL;
-	add_supported_type (md, "application/x-id3", tagger, "MP3");
-	add_supported_type (md, "audio/mpeg", tagger, "MP3");
+	if (gst_element_factory_find ("giostreamsink") == FALSE) {
+		rb_debug ("giostreamsink not found, can't tag anything");
+	} else {
+		if (gst_element_factory_find ("vorbistag") &&
+		    gst_element_factory_find ("vorbisparse") &&
+		    gst_element_factory_find ("oggdemux") &&
+		    gst_element_factory_find ("oggmux")) {
+			rb_debug ("ogg vorbis tagging available");
+			g_hash_table_insert (md->priv->taggers, "application/ogg", vorbis_tagger);
+			g_hash_table_insert (md->priv->taggers, "audio/x-vorbis", vorbis_tagger);
+		}
 
-	{
-		gboolean has_vorbis;
+		if (gst_element_factory_find ("flactag")) {
+			rb_debug ("flac tagging available");
+			g_hash_table_insert (md->priv->taggers, "audio/x-flac", flac_tagger);
+		}
 
-		has_vorbis = ((gst_element_factory_find ("vorbistag") != NULL) &&
-			      gst_default_registry_check_feature_version ("vorbisparse", 0, 10, 6) &&
-			      gst_default_registry_check_feature_version ("oggmux", 0, 10, 6) &&
-			      gst_default_registry_check_feature_version ("oggdemux", 0, 10, 6));
-		tagger = (has_giosink && has_vorbis) ?  rb_add_ogg_tagger : NULL;
+		/* TODO check for new id3 tag element too */
+		if (gst_element_factory_find ("id3v2mux") && gst_element_factory_find ("id3demux")) {
+			rb_debug ("id3 tagging available");
+			g_hash_table_insert (md->priv->taggers, "application/x-id3", id3_tagger);
+			g_hash_table_insert (md->priv->taggers, "audio/mpeg", id3_tagger);
+		}
+
+		if (gst_element_factory_find ("qtdemux") && gst_element_factory_find ("mp4mux")) {
+			rb_debug ("mp4 tagging available");
+			g_hash_table_insert (md->priv->taggers, "audio/x-m4a", mp4_tagger);
+			g_hash_table_insert (md->priv->taggers, "video/quicktime", mp4_tagger);
+		}
 	}
-	add_supported_type (md, "application/ogg", tagger, "Ogg Vorbis");
-	add_supported_type (md, "audio/x-vorbis", tagger, "Ogg Vorbis");
-
-	add_supported_type (md, "audio/x-mod", NULL, "MOD");
-	add_supported_type (md, "audio/x-wav", NULL, "WAV");
-	add_supported_type (md, "video/x-ms-asf", NULL, "ASF");
-
-	tagger = (has_giosink && gst_element_factory_find ("flactag")) ?  rb_add_flac_tagger : NULL;
-	add_supported_type (md, "audio/x-flac", tagger, "FLAC");
-
-	tagger = (has_giosink && gst_element_factory_find ("qtdemux") && gst_element_factory_find ("mp4mux")) ? rb_add_qt_tagger : NULL;
-	add_supported_type (md, "audio/x-m4a", tagger, "M4A");
-	add_supported_type (md, "video/quicktime", tagger, "M4A");			/* hmm. */
-
 }
 
 static void
 rb_metadata_finalize (GObject *object)
 {
-	int i;
 	RBMetaData *md;
 
 	md = RB_METADATA (object);
-
-	for (i = 0; i < md->priv->supported_types->len; i++) {
-		struct RBMetadataGstType *type = g_ptr_array_index (md->priv->supported_types, i);
-		g_free (type->mimetype);
-		g_free (type->human_name);
-		g_free (type);
-	}
-	g_ptr_array_free (md->priv->supported_types, TRUE);
 
 	if (md->priv->metadata)
 		g_hash_table_destroy (md->priv->metadata);
 
 	if (md->priv->pipeline)
 		gst_object_unref (GST_OBJECT (md->priv->pipeline));
+
+	if (md->priv->taggers)
+		g_hash_table_destroy (md->priv->taggers);
 
 	g_free (md->priv->type);
 	g_free (md->priv->uri);
@@ -455,201 +339,6 @@ rb_metadata_new (void)
 }
 
 static void
-free_gvalue (GValue *val)
-{
-	g_value_unset (val);
-	g_free (val);
-}
-
-static int
-rb_metadata_gst_tag_to_field (const char *tag)
-{
-	if (!strcmp (tag, GST_TAG_TITLE))
-		return RB_METADATA_FIELD_TITLE;
-	else if (!strcmp (tag, GST_TAG_ARTIST))
-		return RB_METADATA_FIELD_ARTIST;
-	else if (!strcmp (tag, GST_TAG_ALBUM))
-		return RB_METADATA_FIELD_ALBUM;
-	else if (!strcmp (tag, GST_TAG_DATE))
-		return RB_METADATA_FIELD_DATE;
-	else if (!strcmp (tag, GST_TAG_GENRE))
-		return RB_METADATA_FIELD_GENRE;
-	else if (!strcmp (tag, GST_TAG_COMMENT))
-		return RB_METADATA_FIELD_COMMENT;
-	else if (!strcmp (tag, GST_TAG_TRACK_NUMBER))
-		return RB_METADATA_FIELD_TRACK_NUMBER;
-	else if (!strcmp (tag, GST_TAG_TRACK_COUNT))
-		return RB_METADATA_FIELD_MAX_TRACK_NUMBER;
-	else if (!strcmp (tag, GST_TAG_ALBUM_VOLUME_NUMBER))
-		return RB_METADATA_FIELD_DISC_NUMBER;
-	else if (!strcmp (tag, GST_TAG_ALBUM_VOLUME_COUNT))
-		return RB_METADATA_FIELD_MAX_TRACK_NUMBER;
-	else if (!strcmp (tag, GST_TAG_DESCRIPTION))
-		return RB_METADATA_FIELD_DESCRIPTION;
-	else if (!strcmp (tag, GST_TAG_VERSION))
-		return RB_METADATA_FIELD_VERSION;
-	else if (!strcmp (tag, GST_TAG_ISRC))
-		return RB_METADATA_FIELD_ISRC;
-	else if (!strcmp (tag, GST_TAG_ORGANIZATION))
-		return RB_METADATA_FIELD_ORGANIZATION;
-	else if (!strcmp (tag, GST_TAG_COPYRIGHT))
-		return RB_METADATA_FIELD_COPYRIGHT;
-	else if (!strcmp (tag, GST_TAG_CONTACT))
-		return RB_METADATA_FIELD_CONTACT;
-	else if (!strcmp (tag, GST_TAG_LICENSE))
-		return RB_METADATA_FIELD_LICENSE;
-	else if (!strcmp (tag, GST_TAG_PERFORMER))
-		return RB_METADATA_FIELD_PERFORMER;
-	else if (!strcmp (tag, GST_TAG_DURATION))
-		return RB_METADATA_FIELD_DURATION;
-	else if (!strcmp (tag, GST_TAG_CODEC))
-		return RB_METADATA_FIELD_CODEC;
-	else if (!strcmp (tag, GST_TAG_BITRATE))
-		return RB_METADATA_FIELD_BITRATE;
-	else if (!strcmp (tag, GST_TAG_TRACK_GAIN))
-		return RB_METADATA_FIELD_TRACK_GAIN;
-	else if (!strcmp (tag, GST_TAG_TRACK_PEAK))
-		return RB_METADATA_FIELD_TRACK_PEAK;
-	else if (!strcmp (tag, GST_TAG_ALBUM_GAIN))
-		return RB_METADATA_FIELD_ALBUM_GAIN;
-	else if (!strcmp (tag, GST_TAG_ALBUM_PEAK))
-		return RB_METADATA_FIELD_ALBUM_PEAK;
-	else if (!strcmp (tag, GST_TAG_MUSICBRAINZ_TRACKID))
-		return RB_METADATA_FIELD_MUSICBRAINZ_TRACKID;
-	else if (!strcmp (tag, GST_TAG_MUSICBRAINZ_ARTISTID))
-		return RB_METADATA_FIELD_MUSICBRAINZ_ARTISTID;
-	else if (!strcmp (tag, GST_TAG_MUSICBRAINZ_ALBUMID))
-		return RB_METADATA_FIELD_MUSICBRAINZ_ALBUMID;
-	else if (!strcmp (tag, GST_TAG_MUSICBRAINZ_ALBUMARTISTID))
-		return RB_METADATA_FIELD_MUSICBRAINZ_ALBUMARTISTID;
-	else if (!strcmp (tag, GST_TAG_ARTIST_SORTNAME))
-		return RB_METADATA_FIELD_ARTIST_SORTNAME;
-	else if (!strcmp (tag, GST_TAG_ALBUM_SORTNAME))
-		return RB_METADATA_FIELD_ALBUM_SORTNAME;
-	else
-		return -1;
-}
-
-static const char *
-rb_metadata_gst_field_to_gst_tag (RBMetaDataField field)
-{
-	switch (field)
-	{
-	case RB_METADATA_FIELD_TITLE:
-		return GST_TAG_TITLE;
-	case RB_METADATA_FIELD_ARTIST:
-		return GST_TAG_ARTIST;
-	case RB_METADATA_FIELD_ALBUM:
-		return GST_TAG_ALBUM;
-	case RB_METADATA_FIELD_DATE:
-		return GST_TAG_DATE;
-	case RB_METADATA_FIELD_GENRE:
-		return GST_TAG_GENRE;
-	case RB_METADATA_FIELD_COMMENT:
-		return GST_TAG_COMMENT;
-	case RB_METADATA_FIELD_TRACK_NUMBER:
-		return GST_TAG_TRACK_NUMBER;
-	case RB_METADATA_FIELD_MAX_TRACK_NUMBER:
-		return GST_TAG_TRACK_COUNT;
-	case RB_METADATA_FIELD_DISC_NUMBER:
-		return GST_TAG_ALBUM_VOLUME_NUMBER;
-	case RB_METADATA_FIELD_MAX_DISC_NUMBER:
-		return GST_TAG_ALBUM_VOLUME_COUNT;
-	case RB_METADATA_FIELD_DESCRIPTION:
-		return GST_TAG_DESCRIPTION;
-	case RB_METADATA_FIELD_VERSION:
-		return GST_TAG_VERSION;
-	case RB_METADATA_FIELD_ISRC:
-		return GST_TAG_ISRC;
-	case RB_METADATA_FIELD_ORGANIZATION:
-		return GST_TAG_ORGANIZATION;
-	case RB_METADATA_FIELD_COPYRIGHT:
-		return GST_TAG_COPYRIGHT;
-	case RB_METADATA_FIELD_CONTACT:
-		return GST_TAG_CONTACT;
-	case RB_METADATA_FIELD_LICENSE:
-		return GST_TAG_LICENSE;
-	case RB_METADATA_FIELD_PERFORMER:
-		return GST_TAG_PERFORMER;
-	case RB_METADATA_FIELD_DURATION:
-		return GST_TAG_DURATION;
-	case RB_METADATA_FIELD_CODEC:
-		return GST_TAG_CODEC;
-	case RB_METADATA_FIELD_BITRATE:
-		return GST_TAG_BITRATE;
-	case RB_METADATA_FIELD_TRACK_GAIN:
-		return GST_TAG_TRACK_GAIN;
-	case RB_METADATA_FIELD_TRACK_PEAK:
-		return GST_TAG_TRACK_PEAK;
-	case RB_METADATA_FIELD_ALBUM_GAIN:
-		return GST_TAG_ALBUM_GAIN;
-	case RB_METADATA_FIELD_ALBUM_PEAK:
-		return GST_TAG_ALBUM_PEAK;
-	case RB_METADATA_FIELD_MUSICBRAINZ_TRACKID:
-		return GST_TAG_MUSICBRAINZ_TRACKID;
-	case RB_METADATA_FIELD_MUSICBRAINZ_ARTISTID:
-		return GST_TAG_MUSICBRAINZ_ARTISTID;
-	case RB_METADATA_FIELD_MUSICBRAINZ_ALBUMID:
-		return GST_TAG_MUSICBRAINZ_ALBUMID;
-	case RB_METADATA_FIELD_MUSICBRAINZ_ALBUMARTISTID:
-		return GST_TAG_MUSICBRAINZ_ALBUMARTISTID;
-	case RB_METADATA_FIELD_ARTIST_SORTNAME:
-		return GST_TAG_ARTIST_SORTNAME;
-	case RB_METADATA_FIELD_ALBUM_SORTNAME:
-		return GST_TAG_ALBUM_SORTNAME;
-	default:
-		return NULL;
-	}
-}
-
-static const char *
-rb_metadata_gst_type_to_name (RBMetaData *md, const char *mimetype)
-{
-	int i;
-	for (i = 0; i < md->priv->supported_types->len; i++) {
-		struct RBMetadataGstType *type = g_ptr_array_index (md->priv->supported_types, i);
-		if (!strcmp (type->mimetype, mimetype))
-			return type->human_name;
-	}
-	return NULL;
-}
-
-static RBAddTaggerElem
-rb_metadata_gst_type_to_tag_function (RBMetaData *md, const char *mimetype)
-{
-	int i;
-	for (i = 0; i < md->priv->supported_types->len; i++) {
-		struct RBMetadataGstType *type = g_ptr_array_index (md->priv->supported_types, i);
-		if (!strcmp (type->mimetype, mimetype))
-			return type->tag_func;
-	}
-	return NULL;
-}
-
-static char *
-make_undecodable_error (RBMetaData *md)
-{
-	const char *human_name;
-	char *free_name = NULL;
-
-	human_name = rb_metadata_gst_type_to_name (md, md->priv->type);
-	if (human_name == NULL) {
-		free_name = rb_mime_get_friendly_name (md->priv->type);
-		human_name = free_name;
-	}
-
-	if (human_name) {
-		return g_strdup_printf (_("The GStreamer plugins to decode \"%s\" files cannot be found"),
-					human_name);
-	} else {
-		return g_strdup_printf (_("The file contains a stream of type %s, which is not decodable"),
-					md->priv->type);
-	}
-
-	g_free (free_name);
-}
-
-static void
 rb_metadata_gst_load_tag (const GstTagList *list, const gchar *tag, RBMetaData *md)
 {
 	int count, tem, type;
@@ -657,15 +346,15 @@ rb_metadata_gst_load_tag (const GstTagList *list, const gchar *tag, RBMetaData *
 	GValue *newval;
 	const GValue *val;
 
-	rb_debug ("uri: %s tag: %s ", md->priv->uri, tag);
-
 	count = gst_tag_list_get_tag_size (list, tag);
 	if (count < 1)
 		return;
 
 	tem = rb_metadata_gst_tag_to_field (tag);
-	if (tem < 0)
+	if (tem < 0) {
+		rb_debug ("no metadata field for tag \"%s\"", tag);
 		return;
+	}
 	field = (RBMetaDataField) tem;
 
 	type = rb_metadata_get_field_type (field);
@@ -718,6 +407,9 @@ rb_metadata_gst_load_tag (const GstTagList *list, const gchar *tag, RBMetaData *
 				}
 			}
 		}
+
+		rb_debug ("processed string tag \"%s\": \"%s\"", tag, str);
+
 		g_value_take_string (newval, str);
 		break;
 	}
@@ -731,6 +423,7 @@ rb_metadata_gst_load_tag (const GstTagList *list, const gchar *tag, RBMetaData *
 		gulong bitrate;
 		bitrate = g_value_get_ulong (newval);
 		g_value_set_ulong (newval, bitrate/1000);
+		rb_debug ("processed bitrate value: %lu", g_value_get_ulong (newval));
 		break;
 	}
 
@@ -741,6 +434,7 @@ rb_metadata_gst_load_tag (const GstTagList *list, const gchar *tag, RBMetaData *
 		guint64 duration;
 		duration = g_value_get_uint64 (val);
 		g_value_set_ulong (newval, duration/(1000*1000*1000));
+		rb_debug ("processed duration value: %lu", g_value_get_ulong (newval));
 		break;
 	}
 
@@ -796,12 +490,8 @@ rb_metadata_gst_new_decoded_pad_cb (GstElement *decodebin, GstPad *pad, gboolean
 			md->priv->has_audio = TRUE;
 		} else if (g_str_has_prefix (mimetype, "video/")) {
 			rb_debug ("got decoded video pad of type %s", mimetype);
-			md->priv->has_non_audio = TRUE;
 			md->priv->has_video = TRUE;
 		} else {
-			/* assume anything we can get a video or text stream out of is
-			 * something that should be fed to totem rather than rhythmbox.
-			 */
 			rb_debug ("got decoded pad of non-audio type %s", mimetype);
 			md->priv->has_non_audio = TRUE;
 		}
@@ -815,27 +505,6 @@ rb_metadata_gst_new_decoded_pad_cb (GstElement *decodebin, GstPad *pad, gboolean
 	 */
 	if (cancel)
 		gst_element_set_state (md->priv->pipeline, GST_STATE_NULL);
-}
-
-static void
-rb_metadata_gst_unknown_type_cb (GstElement *decodebin, GstPad *pad, GstCaps *caps, RBMetaData *md)
-{
-	if (!gst_caps_is_empty (caps) && !gst_caps_is_any (caps)) {
-		GstStructure *structure;
-		const gchar *mimetype;
-
-		structure = gst_caps_get_structure (caps, 0);
-		mimetype = gst_structure_get_name (structure);
-
-		g_free (md->priv->type);
-		md->priv->type = g_strdup (mimetype);
-
-		rb_debug ("decodebin emitted unknown type signal for %s", mimetype);
-	} else {
-		rb_debug ("decodebin emitted unknown type signal");
-	}
-
-	md->priv->has_non_audio = TRUE;
 }
 
 static GstElement *make_pipeline_element (GstElement *pipeline, const char *element, GError **error)
@@ -857,10 +526,39 @@ static GstElement *make_pipeline_element (GstElement *pipeline, const char *elem
 static void
 rb_metadata_handle_missing_plugin_message (RBMetaData *md, GstMessage *message)
 {
+	char *detail;
+
+	detail = gst_missing_plugin_message_get_installer_detail (message);
 	rb_debug ("got missing-plugin message from %s: %s",
 		  GST_OBJECT_NAME (GST_MESSAGE_SRC (message)),
-		  gst_missing_plugin_message_get_installer_detail (message));
+		  detail);
+	g_free (detail);
+
 	md->priv->missing_plugins = g_slist_prepend (md->priv->missing_plugins, gst_message_ref (message));
+
+	/* update our information on what's in the stream based on
+	 * what we're missing.
+	 */
+	switch (rb_metadata_gst_get_missing_plugin_type (message)) {
+	case MEDIA_TYPE_NONE:
+		break;
+	case MEDIA_TYPE_CONTAINER:
+		/* hm, maybe we need a way to say 'we don't even know what's in here'.
+		 * but for now, the things we actually identify as containers are mostly
+		 * used for audio, so pretending they actually are is good enough.
+		 */
+	case MEDIA_TYPE_AUDIO:
+		md->priv->has_audio = TRUE;
+		break;
+	case MEDIA_TYPE_VIDEO:
+		md->priv->has_video = TRUE;
+		break;
+	case MEDIA_TYPE_OTHER:
+		md->priv->has_non_audio = TRUE;
+		break;
+	default:
+		g_assert_not_reached ();
+	}
 }
 
 static gboolean
@@ -978,23 +676,6 @@ rb_metadata_event_loop (RBMetaData *md, GstElement *element, gboolean block)
 	gst_object_unref (bus);
 }
 
-static gboolean
-ignore_mimetype (const char *type)
-{
-	guint i;
-
-	for (i = 0; i < G_N_ELEMENTS (non_ignore_mime_types); i++) {
-		if (g_str_equal (type, non_ignore_mime_types[i]) != FALSE)
-			return FALSE;
-	}
-	for (i = 0; i < G_N_ELEMENTS (ignore_mime_types); i++) {
-		if (g_str_has_prefix (type, ignore_mime_types[i]) != FALSE)
-			return TRUE;
-	}
-
-	return FALSE;
-}
-
 void
 rb_metadata_load (RBMetaData *md,
 		  const char *uri,
@@ -1016,7 +697,6 @@ rb_metadata_load (RBMetaData *md,
 	md->priv->type = NULL;
 	md->priv->error = NULL;
 	md->priv->eos = FALSE;
-	md->priv->handoff = FALSE;
 	md->priv->has_audio = FALSE;
 	md->priv->has_non_audio = FALSE;
 	md->priv->has_video = FALSE;
@@ -1036,7 +716,7 @@ rb_metadata_load (RBMetaData *md,
 	if (md->priv->metadata)
 		g_hash_table_destroy (md->priv->metadata);
 	md->priv->metadata = g_hash_table_new_full (g_direct_hash, g_direct_equal,
-						    NULL, (GDestroyNotify) free_gvalue);
+						    NULL, (GDestroyNotify) rb_value_free);
 
 	/* The main tagfinding pipeline looks like this:
  	 * <src> ! decodebin ! fakesink
@@ -1066,7 +746,6 @@ rb_metadata_load (RBMetaData *md,
  	}
 
  	g_signal_connect_object (decodebin, "new-decoded-pad", G_CALLBACK (rb_metadata_gst_new_decoded_pad_cb), md, 0);
- 	g_signal_connect_object (decodebin, "unknown-type", G_CALLBACK (rb_metadata_gst_unknown_type_cb), md, 0);
 
  	/* locate the decodebin's typefind, so we can get the have_type signal too.
  	 * this is kind of nasty, since it relies on an essentially arbitrary string
@@ -1157,75 +836,19 @@ rb_metadata_load (RBMetaData *md,
 	if (state_ret == GST_STATE_CHANGE_ASYNC) {
 		g_warning ("Failed to return metadata reader to NULL state");
 	}
-	md->priv->handoff = (state_ret == GST_STATE_CHANGE_SUCCESS);
 
-	/* report errors for various failure cases.
-	 * these don't include the URI as the import errors source
-	 * already displays it.
-	 */
-	if ((md->priv->has_video || !md->priv->has_audio) &&
-	    (md->priv->has_non_audio || !md->priv->handoff)) {
-		gboolean ignore = FALSE;
-
-		if (md->priv->has_video) {
-			ignore = TRUE;
-		} else {
-			ignore = ignore_mimetype (md->priv->type);
-		}
-
-		if (!ignore) {
-			char *msg = make_undecodable_error (md);
-			g_set_error (error,
-				     RB_METADATA_ERROR,
-				     RB_METADATA_ERROR_NOT_AUDIO,
-				     "%s", msg);
-			g_free (msg);
-		} else {
-			/* we don't need an error message here (it'll never be
-			 * displayed).  using NULL causes crashes with some C
-			 * libraries, and gcc doesn't like zero-length format
-			 * strings, so we use a single space instead.
-			 */
-			g_set_error (error,
-				     RB_METADATA_ERROR,
-				     RB_METADATA_ERROR_NOT_AUDIO_IGNORE,
-				     " ");
-		}
-	} else if (md->priv->error != NULL) {
+	if (md->priv->error != NULL) {
 		g_propagate_error (error, md->priv->error);
 		md->priv->error = NULL;
 	} else if (!md->priv->type) {
-		/* ignore really small files that can't be identified */
-		gint error_code = RB_METADATA_ERROR_UNRECOGNIZED;
-		if (file_size > 0 && file_size < REALLY_SMALL_FILE_SIZE) {
-			rb_debug ("ignoring %s because it's too small to care about", md->priv->uri);
-			error_code = RB_METADATA_ERROR_NOT_AUDIO_IGNORE;
-		} else if (file_size == 0) {
-			g_clear_error (error);
-			g_set_error (error,
-				     RB_METADATA_ERROR,
-				     RB_METADATA_ERROR_EMPTY_FILE,
-				     _("Empty file"));
-			goto out;
-		}
-
 		g_clear_error (error);
 		g_set_error (error,
 			     RB_METADATA_ERROR,
-			     error_code,
+			     RB_METADATA_ERROR_UNRECOGNIZED,
 			     _("The MIME type of the file could not be identified"));
 	} else {
 		/* yay, it worked */
 		rb_debug ("successfully read metadata for %s", uri);
-
-		/* it doesn't matter if we don't recognise the format,
-		 * as long as gstreamer can play it, we can put it in
-		 * the library.
-		 */
-		if (!rb_metadata_gst_type_to_name (md, md->priv->type)) {
-			rb_debug ("we don't know what type %s (from file %s) is, but we'll play it anyway",
-				  md->priv->type, uri);
-		}
 	}
 
  out:
@@ -1237,7 +860,7 @@ rb_metadata_load (RBMetaData *md,
 gboolean
 rb_metadata_can_save (RBMetaData *md, const char *mimetype)
 {
-	return rb_metadata_gst_type_to_tag_function (md, mimetype) != NULL;
+	return g_hash_table_lookup (md->priv->taggers, mimetype) != NULL;
 }
 
 static void
@@ -1341,8 +964,7 @@ rb_metadata_save (RBMetaData *md, GError **error)
 			      md);
 
 	/* Tagger element(s) */
-	add_tagger_func = rb_metadata_gst_type_to_tag_function (md, md->priv->type);
-
+	add_tagger_func = g_hash_table_lookup (md->priv->taggers, md->priv->type);
 	if (!add_tagger_func) {
 		g_set_error (error,
 			     RB_METADATA_ERROR,
@@ -1351,7 +973,7 @@ rb_metadata_save (RBMetaData *md, GError **error)
 		goto out_error;
 	}
 
-	retag_end = add_tagger_func (md, source);
+	retag_end = add_tagger_func (md->priv->pipeline, source, md->priv->tags);
 	if (!retag_end) {
 		g_set_error (error,
 			     RB_METADATA_ERROR,
@@ -1532,5 +1154,23 @@ rb_metadata_get_missing_plugins (RBMetaData *md,
 	*missing_plugins = mp;
 	*plugin_descriptions = pd;
 	return TRUE;
+}
+
+gboolean
+rb_metadata_has_audio (RBMetaData *md)
+{
+	return md->priv->has_audio;
+}
+
+gboolean
+rb_metadata_has_video (RBMetaData *md)
+{
+	return md->priv->has_video;
+}
+
+gboolean
+rb_metadata_has_other_data (RBMetaData *md)
+{
+	return md->priv->has_non_audio;		/* kinda */
 }
 
