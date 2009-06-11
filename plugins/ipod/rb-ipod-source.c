@@ -1805,9 +1805,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
  	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
- 	//gpointer lib_track = NULL; // Unused yet
- 	//gpointer itdb_track = NULL;// Unused yet
- 	//GList *ipod_tracks = rb_ipod_db_get_tracks (priv->ipod_db); // maybe
+ 	//gpointer lib_track = NULL;	// Unused yet
+	//Itdb_Track *itdb_track = NULL;// Unused yet
 	
 	// Calculate How much Music needs transferring
 	if (impl_get_sync_music (ipod_source)) {
@@ -1817,7 +1816,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		/* FIXME: This is not correct! Just here to illustrate the idea!
 		 *  If the lists are sorted alphabetically we can go through and
 		 *  pick out any differences.
-		while (lib_track != NULL && ipod_track != NULL) {
+		while (lib_track != NULL && itdb_track != NULL) {
 			if (strcmp (lib_track->name, itdb_track->name) == 0) {
 				// Tracks are equivalent move with both ptrs
 				lib_track++;
