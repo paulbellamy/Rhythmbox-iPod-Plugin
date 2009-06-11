@@ -1848,25 +1848,28 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		//Not enough Space on Device throw up an error
 	}
 	
-	if (impl_get_sync_music (ipod_source)) {
-		// Remove tracks on iPod, but not in itinerary
-		
+	// Remove tracks and podcasts on iPod, but not in itinerary
+	/* FIXME:
+	 * This needs to actually remove them from the iPod.
+	 *  Is there a remove function?
+	while(to_remove.hasNext ()) {
+		ptr_ipod_track = to_remove.getNext();
+		rb_ipod_source_track_remove (ipod_source, ptr_ipod_track);
 	}
-	
-	if (impl_get_sync_podcasts (ipod_source)) {
-		// Remove podcasts on iPod, but not in itinerary
-	}
+	*/
 	
 	// Done with this list, clear it.
 	g_list_free( to_remove );
 	
-	if (impl_get_sync_music (ipod_source)) {
-		// Transfer needed tracks from itinerary to iPod
+	// Transfer needed tracks and podcasts from itinerary to iPod
+	/* FIXME:
+	 * This needs to actually transfer them to the iPod.
+	 *  Is there a remove function?
+	while(to_add.hasNext ()) {
+		ptr_lib_track = to_add.getNext();
+		rb_ipod_source_track_add (ipod_source, ptr_lib_track);
 	}
-	
-	if (impl_get_sync_podcasts (ipod_source)) {
-		// transfer needed podcasts from itinerary to iPod
-	}
+	*/
 	
 	// Done with this list, clear it.
 	g_list_free( to_add );

@@ -36,32 +36,12 @@
 /* macro to create rb_media_player_source_get_type and set rb_media_player_source_parent_class */
 G_DEFINE_TYPE (RBMediaPlayerSource, rb_media_player_source, G_TYPE_OBJECT);
 
-static GObject *
-rb_media_player_source_constructor (GType			gtype,
-				    guint		n_properties,
-				    GObjectConstructParam *properties)
-{
-	GObject *obj;
-	
-	{
-		/* Always chain up to the parent constructor */
-		//RBMediaPlayerSourceClass *klass; // Commented cause it is unused for now
-		GObjectClass *parent_class;
-		parent_class = G_OBJECT_CLASS (rb_media_player_source_parent_class);
-		obj = parent_class->constructor(gtype, n_properties, properties);
-	}
-	
-	/* update the object state depending on constructor properties */
-	
-	return obj;
-}
-
 static void
 rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 {
+	/*
 	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-	
-	gobject_class->constructor = rb_media_player_source_constructor;
+	*/
 }
 
 static void
