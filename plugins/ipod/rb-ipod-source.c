@@ -1805,8 +1805,9 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
  	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
- 	//gpointer ptr_lib_track = NULL; // Unused yet
- 	//gpointer ptr_ipod_track = NULL;// Unused yet
+ 	//gpointer lib_track = NULL; // Unused yet
+ 	//gpointer itdb_track = NULL;// Unused yet
+ 	//GList *ipod_tracks = rb_ipod_db_get_tracks (priv->ipod_db); // maybe
 	
 	// Calculate How much Music needs transferring
 	if (impl_get_sync_music (ipod_source)) {
@@ -1816,21 +1817,21 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		/* FIXME: This is not correct! Just here to illustrate the idea!
 		 *  If the lists are sorted alphabetically we can go through and
 		 *  pick out any differences.
-		while (ptr_lib_track != NULL && ptr_ipod_track != NULL) {
-			if (strcmp (ptr_lib_track->name, ptr_ipod_track->name) == 0) {
+		while (lib_track != NULL && ipod_track != NULL) {
+			if (strcmp (lib_track->name, itdb_track->name) == 0) {
 				// Tracks are equivalent move with both ptrs
-				ptr_lib_track++;
-				ptr_ipod_track++;
-			} else if (strcmp (ptr_lib_track->name, ptr_ipod_track->name) < 0 ) {
+				lib_track++;
+				itdb_track++;
+			} else if (strcmp (lib_track->name, itdb_track->name) < 0 ) {
 				// Item is in itinerary, but not on ipod
-				to_add = g_list_append(to_add, ptr_lib_track);
-				space_needed_music += sizeof(ptr_lib_track);
-				ptr_lib_track++;
+				to_add = g_list_append(to_add, lib_track);
+				space_needed_music += sizeof(lib_track);
+				lib_track++;
 			} else {
 				// Item is on ipod but not in itinerary
-				to_remove = g_list_append(to_remove, ptr_ipod_track);
-				space_needed_music -= sizeof(ptr_ipod_track);
-				ptr_ipod_track++;
+				to_remove = g_list_append(to_remove, itdb_track);
+				space_needed_music -= sizeof(itdb_track);
+				itdb_track++;
 			}
 		}
 		*/
@@ -1853,8 +1854,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	 * This needs to actually remove them from the iPod.
 	 *  Is there a remove function?
 	while(to_remove.hasNext ()) {
-		ptr_ipod_track = to_remove.getNext();
-		rb_ipod_source_track_remove (ipod_source, ptr_ipod_track);
+		itdb_track = to_remove.getNext();
+		rb_ipod_db_track_remove (priv->ipod_db, itdb_track);
 	}
 	*/
 	
@@ -1866,8 +1867,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	 * This needs to actually transfer them to the iPod.
 	 *  Is there a remove function?
 	while(to_add.hasNext ()) {
-		ptr_lib_track = to_add.getNext();
-		rb_ipod_source_track_add (ipod_source, ptr_lib_track);
+		lib_track = to_add.getNext();
+		rb_ipod_db_track_add (priv->ipod_db, lib_track);
 	}
 	*/
 	

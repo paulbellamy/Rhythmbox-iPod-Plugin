@@ -34,6 +34,7 @@
 #include "rb-media-player-source.h"
 #include "rhythmdb.h"
 #include "rb-plugin.h"
+#include "rb-ipod-db.h"
 
 G_BEGIN_DECLS
 
