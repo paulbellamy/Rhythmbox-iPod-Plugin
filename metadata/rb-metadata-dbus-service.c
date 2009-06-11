@@ -58,19 +58,25 @@ typedef struct {
 	gboolean external;
 } ServiceData;
 
-enum {
-	ERROR_FLAG = 1,
-	MISSING_PLUGINS = 2
-};
+static gboolean
+append_error (DBusMessageIter *iter,
+	      gint error_type,
+	      const char *message)
+{
+	if (!dbus_message_iter_append_basic (iter, DBUS_TYPE_UINT32, &error_type) ||
+	    !dbus_message_iter_append_basic (iter, DBUS_TYPE_STRING, &message)) {
+		rb_debug ("couldn't append error data");
+		return FALSE;
+	}
+
+	return TRUE;
+}
 
 static DBusHandlerResult
-_send_error (DBusConnection *connection,
-	     DBusMessage *request,
-	     int details,
-	     char **missing_plugins,
-	     char **plugin_descriptions,
-	     gint error_type,
-	     const char *message)
+send_error (DBusConnection *connection,
+	    DBusMessage *request,
+	    gint error_type,
+	    const char *message)
 {
 	DBusMessage *reply = dbus_message_new_method_return (request);
 	DBusMessageIter iter;
@@ -83,29 +89,7 @@ _send_error (DBusConnection *connection,
 	}
 
 	dbus_message_iter_init_append (reply, &iter);
-	
-	if (details & MISSING_PLUGINS) {
-		if (!rb_metadata_dbus_add_strv (&iter, missing_plugins)) {
-			rb_debug ("couldn't append missing plugins data");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		}
-		if (!rb_metadata_dbus_add_strv (&iter, plugin_descriptions)) {
-			rb_debug ("couldn't append missing plugin descriptions");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		}
-	}
-
-	if (details & ERROR_FLAG) {
-		gboolean ok = FALSE;
-		if (!dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &ok)) {
-			rb_debug ("couldn't append error flag");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		}
-	}
-
-	if (!dbus_message_iter_append_basic (&iter, DBUS_TYPE_UINT32, &error_type) ||
-	    !dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &message)) {
-		rb_debug ("couldn't append error data");
+	if (append_error (&iter, error_type, message) == FALSE) {
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
 
@@ -123,7 +107,7 @@ rb_metadata_dbus_load (DBusConnection *connection,
 	DBusMessageIter iter;
 	DBusMessage *reply;
 	GError *error = NULL;
-	gboolean ok = TRUE;
+	gboolean ok;
 	const char *mimetype = NULL;
 	char **missing_plugins = NULL;
 	char **plugin_descriptions = NULL;
@@ -136,33 +120,13 @@ rb_metadata_dbus_load (DBusConnection *connection,
 	}
 
 	if (!rb_metadata_dbus_get_string (&iter, &uri)) {
-		/* make translatable? */
-		return _send_error (connection, message,
-				    ERROR_FLAG | MISSING_PLUGINS,
-				    NULL, NULL,
-				    RB_METADATA_ERROR_INTERNAL,
-				    "Unable to read URI from request");
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
 
 	rb_debug ("loading metadata from %s", uri);
 	rb_metadata_load (svc->metadata, uri, &error);
+	rb_debug ("metadata load finished (type %s)", rb_metadata_get_mime (svc->metadata));
 	g_free (uri);
-
-	rb_metadata_get_missing_plugins (svc->metadata, &missing_plugins, &plugin_descriptions);
-
-	if (error != NULL) {
-		DBusHandlerResult r;
-		rb_debug ("metadata error: %s", error->message);
-
-		r = _send_error (connection, message, 
-				 ERROR_FLAG | MISSING_PLUGINS,
-				 missing_plugins, plugin_descriptions,
-				 error->code, error->message);
-		g_clear_error (&error);
-		g_strfreev (missing_plugins);
-		return r;
-	}
-	rb_debug ("metadata load finished; mimetype = %s", rb_metadata_get_mime (svc->metadata));
 
 	/* construct reply */
 	reply = dbus_message_new_method_return (message);
@@ -170,13 +134,10 @@ rb_metadata_dbus_load (DBusConnection *connection,
 		rb_debug ("out of memory creating return message");
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
-
-	mimetype = rb_metadata_get_mime (svc->metadata);
-	has_audio = rb_metadata_has_audio (svc->metadata);
-	has_video = rb_metadata_has_video (svc->metadata);
-	has_other_data = rb_metadata_has_other_data (svc->metadata);
-	dbus_message_iter_init_append (reply, &iter);
 	
+	dbus_message_iter_init_append (reply, &iter);
+
+	rb_metadata_get_missing_plugins (svc->metadata, &missing_plugins, &plugin_descriptions);
 	if (!rb_metadata_dbus_add_strv (&iter, missing_plugins)) {
 		rb_debug ("out of memory adding data to return message");
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
@@ -186,8 +147,12 @@ rb_metadata_dbus_load (DBusConnection *connection,
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
 
-	if (!dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &ok) ||
-	    !dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &has_audio) ||
+	mimetype = rb_metadata_get_mime (svc->metadata);
+	has_audio = rb_metadata_has_audio (svc->metadata);
+	has_video = rb_metadata_has_video (svc->metadata);
+	has_other_data = rb_metadata_has_other_data (svc->metadata);
+
+	if (!dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &has_audio) ||
 	    !dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &has_video) ||
 	    !dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &has_other_data) ||
 	    !dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &mimetype)) {
@@ -195,13 +160,23 @@ rb_metadata_dbus_load (DBusConnection *connection,
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
 
+	ok = (error == NULL);
+	if (!dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &ok)) {
+		rb_debug ("out of memory adding error flag to return message");
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	}
+
+	if (error != NULL) {
+		rb_debug ("metadata error: %s", error->message);
+		if (append_error (&iter, error->code, error->message) == FALSE) {
+			rb_debug ("out of memory adding error details to return message");
+			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		}
+	}
+
 	if (!rb_metadata_dbus_add_to_message (svc->metadata, &iter)) {
-		/* make translatable? */
-		return _send_error (connection, message,
-				    ERROR_FLAG | MISSING_PLUGINS,
-				    missing_plugins, plugin_descriptions,
-				    RB_METADATA_ERROR_INTERNAL,
-				    "Unable to add metadata to return message");
+		rb_debug ("unable to add metadata to return message");
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
 
 	if (!dbus_connection_send (connection, reply, NULL)) {
@@ -210,34 +185,17 @@ rb_metadata_dbus_load (DBusConnection *connection,
 	}
 
 	dbus_message_unref (reply);
-
 	return DBUS_HANDLER_RESULT_HANDLED;
 }
 
 static DBusHandlerResult
-rb_metadata_dbus_can_save (DBusConnection *connection,
-			   DBusMessage *message,
-			   ServiceData *svc)
+rb_metadata_dbus_get_saveable_types (DBusConnection *connection,
+				     DBusMessage *message,
+				     ServiceData *svc)
 {
-	char *mimetype;
 	DBusMessageIter iter;
 	DBusMessage *reply;
-	gboolean can_save;
-
-	if (!dbus_message_iter_init (message, &iter)) {
-		return DBUS_HANDLER_RESULT_NEED_MEMORY;
-	}
-
-	if (!rb_metadata_dbus_get_string (&iter, &mimetype)) {
-		/* make translatable? */
-		return _send_error (connection, message, ERROR_FLAG,
-				    NULL, NULL,
-				    RB_METADATA_ERROR_INTERNAL,
-				    "Unable to read MIME type from request");
-	}
-
-	can_save = rb_metadata_can_save (svc->metadata, mimetype);
-	g_free (mimetype);
+	char **saveable_types;
 
 	/* construct reply */
 	reply = dbus_message_new_method_return (message);
@@ -247,10 +205,15 @@ rb_metadata_dbus_can_save (DBusConnection *connection,
 	}
 
 	dbus_message_iter_init_append (reply, &iter);
-	if (!dbus_message_iter_append_basic (&iter, DBUS_TYPE_BOOLEAN, &can_save)) {
-		rb_debug ("out of memory adding data to return message");
+
+	saveable_types = rb_metadata_get_saveable_types (svc->metadata);
+
+	if (!rb_metadata_dbus_add_strv (&iter, saveable_types)) {
+		rb_debug ("out of memory adding saveable types to return message");
+		g_strfreev (saveable_types);
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
+	g_strfreev (saveable_types);
 
 	if (!dbus_connection_send (connection, reply, NULL)) {
 		rb_debug ("failed to send return message");
@@ -289,9 +252,9 @@ rb_metadata_dbus_save (DBusConnection *connection,
 						 data,
 						 &iter)) {
 		/* make translatable? */
-		return _send_error (connection, message, 0, NULL, NULL,
-				    RB_METADATA_ERROR_INTERNAL,
-				    "Unable to read metadata from message");
+		return send_error (connection, message,
+				   RB_METADATA_ERROR_INTERNAL,
+				   "Unable to read metadata from message");
 	}
 
 	/* pass to real metadata instance, and save it */
@@ -304,7 +267,7 @@ rb_metadata_dbus_save (DBusConnection *connection,
 		DBusHandlerResult r;
 		rb_debug ("metadata error: %s", error->message);
 
-		r = _send_error (connection, message, 0, NULL, NULL, error->code, error->message);
+		r = send_error (connection, message, error->code, error->message);
 		g_clear_error (&error);
 		return r;
 	}
@@ -376,12 +339,12 @@ _handle_message (DBusConnection *connection, DBusMessage *message, void *data)
 {
 	ServiceData *svc = (ServiceData *)data;
 	DBusHandlerResult result;
-	rb_debug ("handling metadata service message");
+	rb_debug ("handling metadata service message: %s", dbus_message_get_member (message));
 
 	if (dbus_message_is_method_call (message, RB_METADATA_DBUS_INTERFACE, "load")) {
 		result = rb_metadata_dbus_load (connection, message, svc);
-	} else if (dbus_message_is_method_call (message, RB_METADATA_DBUS_INTERFACE, "canSave")) {
-		result = rb_metadata_dbus_can_save (connection, message, svc);
+	} else if (dbus_message_is_method_call (message, RB_METADATA_DBUS_INTERFACE, "getSaveableTypes")) {
+		result = rb_metadata_dbus_get_saveable_types (connection, message, svc);
 	} else if (dbus_message_is_method_call (message, RB_METADATA_DBUS_INTERFACE, "save")) {
 		result = rb_metadata_dbus_save (connection, message, svc);
 	} else if (dbus_message_is_method_call (message, RB_METADATA_DBUS_INTERFACE, "ping")) {
@@ -426,15 +389,21 @@ _new_connection (DBusServer *server,
 }
 
 static int
-test_can_save (const char *mimetype)
+test_saveable_types ()
 {
 	RBMetaData *md;
-	gboolean can_save;
+	char **saveable;
+	int i;
 
 	md = rb_metadata_new ();
-	can_save = rb_metadata_can_save (md, mimetype);
-	g_print ("%s save %s\n", can_save ? "Can" : "Can't", mimetype);
-	g_object_unref (G_OBJECT (md));
+	saveable = rb_metadata_get_saveable_types (md);
+	g_object_unref (md);
+
+	for (i = 0; saveable[i] != NULL; i++) {
+		g_print ("%s\n", saveable[i]);
+	}
+	g_strfreev (saveable);
+
 	return 0;
 }
 
@@ -450,13 +419,7 @@ test_load (const char *uri)
 	md = rb_metadata_new ();
 	rb_metadata_load (md, uri, &error);
 	if (error) {
-		if (error->code == RB_METADATA_ERROR_NOT_AUDIO_IGNORE) {
-			g_print ("%s is not an audio stream (ignored)\n", uri);
-		} else if (error->code == RB_METADATA_ERROR_NOT_AUDIO) {
-			g_print ("%s is not an audio stream\n", uri);
-		} else {
-			g_print ("Error loading metadata from %s: %s\n", uri, error->message);
-		}
+		g_print ("Error loading metadata from %s: %s\n", uri, error->message);
 		g_clear_error (&error);
 		rv = -1;
 	} else {
@@ -526,8 +489,8 @@ main (int argc, char **argv)
 	if (argv[1] != NULL && strcmp(argv[1], "--load") == 0) {
 		return test_load (argv[2]);
 	}
-	if (argv[1] != NULL && strcmp(argv[1], "--can-save") == 0) {
-		return test_can_save (argv[2]);
+	if (argv[1] != NULL && strcmp(argv[1], "--saveable-types") == 0) {
+		return test_saveable_types ();
 	}
 
 	if (argv[1] != NULL && strcmp (argv[1], "--external") == 0) {

@@ -83,6 +83,7 @@ static GPid metadata_child = 0;
 static int metadata_stdout = -1;
 static GMainContext *main_context = NULL;
 static GStaticMutex conn_mutex = G_STATIC_MUTEX_INIT;
+static char **saveable_types = NULL;
 
 struct RBMetaDataPrivate
 {
@@ -207,9 +208,13 @@ static gboolean
 start_metadata_service (GError **error)
 {
 	DBusError dbus_error = {0,};
+	DBusMessage *message;
+	DBusMessage *response;
+	DBusMessageIter iter;
 	GIOChannel *stdout_channel;
 	GIOStatus status;
 	gchar *dbus_address = NULL;
+	char *saveable_type_list;
 
 	if (dbus_connection) {
 		if (ping_metadata_service (error))
@@ -307,6 +312,51 @@ start_metadata_service (GError **error)
 	dbus_connection_setup_with_g_main (dbus_connection, main_context);
 
 	rb_debug ("Metadata process %d started", metadata_child);
+
+	/* now ask it what types it can re-tag */
+	if (saveable_types != NULL) {
+		g_strfreev (saveable_types);
+	}
+
+	message = dbus_message_new_method_call (RB_METADATA_DBUS_NAME,
+						RB_METADATA_DBUS_OBJECT_PATH,
+						RB_METADATA_DBUS_INTERFACE,
+						"getSaveableTypes");
+	if (!message) {
+		/* what now? */
+		rb_debug ("unable to query metadata helper for saveable types");
+		return FALSE;
+	}
+
+	rb_debug ("sending metadata saveable types query");
+	response = dbus_connection_send_with_reply_and_block (dbus_connection,
+							      message,
+							      RB_METADATA_DBUS_TIMEOUT,
+							      &dbus_error);
+
+	if (!response) {
+		rb_debug ("saveable type query failed");
+		return FALSE;
+	}
+
+	if (!dbus_message_iter_init (response, &iter)) {
+		rb_debug ("couldn't read saveable type query response");
+		return FALSE;
+	}
+
+	if (!rb_metadata_dbus_get_strv (&iter, &saveable_types)) {
+		rb_debug ("couldn't get saveable type data from response message");
+		return FALSE;
+	}
+
+	saveable_type_list = g_strjoinv (", ", saveable_types);
+	rb_debug ("saveable types from metadata helper: %s", saveable_type_list);
+	g_free (saveable_type_list);
+
+	if (message)
+		dbus_message_unref (message);
+	if (response)
+		dbus_message_unref (response);
 	return TRUE;
 }
 
@@ -453,15 +503,6 @@ rb_metadata_load (RBMetaData *md,
 	}
 
 	if (*error == NULL) {
-		if (!rb_metadata_dbus_get_boolean (&iter, &ok)) {
-			g_propagate_error (error, dbus_gerror);
-			rb_debug ("couldn't get success flag from response message");
-		} else if (ok == FALSE) {
-			read_error_from_message (md, &iter, error);
-		}
-	}
-
-	if (*error == NULL) {
 		if (!rb_metadata_dbus_get_boolean (&iter, &md->priv->has_audio)) {
 			g_propagate_error (error, dbus_gerror);
 			rb_debug ("couldn't get has-audio flag from response message");
@@ -488,7 +529,7 @@ rb_metadata_load (RBMetaData *md,
 		}
 	}
 
-	if (ok && *error == NULL) {
+	if (*error == NULL) {
 		if (!rb_metadata_dbus_get_string (&iter, &md->priv->mimetype)) {
 			g_propagate_error (error, dbus_gerror);
 		} else {
@@ -496,7 +537,16 @@ rb_metadata_load (RBMetaData *md,
 		}
 	}
 
-	if (ok && *error == NULL) {
+	if (*error == NULL) {
+		if (!rb_metadata_dbus_get_boolean (&iter, &ok)) {
+			g_propagate_error (error, dbus_gerror);
+			rb_debug ("couldn't get success flag from response message");
+		} else if (ok == FALSE) {
+			read_error_from_message (md, &iter, error);
+		}
+	}
+
+	if (*error == NULL) {
 		rb_metadata_dbus_read_from_message (md, md->priv->metadata, &iter);
 	}
 
@@ -642,52 +692,43 @@ gboolean
 rb_metadata_can_save (RBMetaData *md, const char *mimetype)
 {
 	GError *error = NULL;
-	DBusMessage *message = NULL;
-	DBusMessage *response = NULL;
-	gboolean can_save = FALSE;
-	DBusError dbus_error = {0,};
-	DBusMessageIter iter;
-	gboolean ok = TRUE;
+	gboolean result = FALSE;
+	int i = 0;
 
 	g_static_mutex_lock (&conn_mutex);
 
-	if (start_metadata_service (&error) == FALSE) {
-		g_error_free (error);
-		ok = FALSE;
-	}
-
-	if (ok) {
-		message = dbus_message_new_method_call (RB_METADATA_DBUS_NAME,
-							RB_METADATA_DBUS_OBJECT_PATH,
-							RB_METADATA_DBUS_INTERFACE,
-							"canSave");
-		if (!message) {
-			ok = FALSE;
-		} else if (!dbus_message_append_args (message, DBUS_TYPE_STRING, &mimetype, DBUS_TYPE_INVALID)) {
-			ok = FALSE;
+	if (saveable_types == NULL) {
+		if (start_metadata_service (&error) == FALSE) {
+			g_error_free (error);
+			return FALSE;
 		}
 	}
 
-	if (ok) {
-		response = dbus_connection_send_with_reply_and_block (dbus_connection,
-								      message,
-								      RB_METADATA_DBUS_TIMEOUT,
-								      &dbus_error);
-		if (!response) {
-			dbus_error_free (&dbus_error);
-			ok = FALSE;
-		} else if (dbus_message_iter_init (response, &iter)) {
-			rb_metadata_dbus_get_boolean (&iter, &can_save);
+	for (i = 0; saveable_types[i] != NULL; i++) {
+		if (g_str_equal (mimetype, saveable_types[i])) {
+			result = TRUE;
+			break;
 		}
 	}
 
-	if (message)
-		dbus_message_unref (message);
-	if (response)
-		dbus_message_unref (response);
 	g_static_mutex_unlock (&conn_mutex);
+	return result;
+}
 
-	return can_save;
+/**
+ * rb_metadata_get_saveable_types:
+ * @md: a #RBMetaData
+ *
+ * Constructs a list of the media types for which the metadata backend
+ * implements tag saving.
+ *
+ * Return value: a NULL-terminated array of media type strings.  Use g_strfreev
+ *  to free it.
+ */
+char **
+rb_metadata_get_saveable_types (RBMetaData *md)
+{
+	return g_strdupv (saveable_types);
 }
 
 /**
