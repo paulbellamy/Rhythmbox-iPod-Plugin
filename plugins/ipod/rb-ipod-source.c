@@ -725,13 +725,20 @@ rb_ipod_source_load_file (RBiPodSource *source)
 	//char *end;   // unused for now
 	gsize size;
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	GMount *mount;
 	
 	
-	/* FIXME: Should eventually look for this in .local/share/rhythmbox/ipod/.
+	/* FIXME: Should store all the ipod data in a single GKeyFile
 	 */
 	/* Build the filename */
-	filename = g_string_append( filename,
-				    rb_ipod_db_get_ipod_name (priv->ipod_db) );
+	g_object_get (source, "mount", &mount, NULL);
+	if (rb_ipod_helpers_get_serial ( mount ) != NULL) {
+		filename = g_string_append( filename,
+					    rb_ipod_helpers_get_serial ( mount ) );
+	} else {
+		filename = g_string_append( filename,
+					    rb_ipod_db_get_ipod_name (priv->ipod_db) );
+	}
 
 	/* we don't really care about errors enough to report them here */
 	pathname = rb_find_user_data_file (filename->str, NULL);
@@ -783,12 +790,20 @@ rb_ipod_source_save_file (RBiPodSource *source)
 	//GList *l;	// Unused for now
 	GString *str = g_string_new("");
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	GMount *mount;
 	
-	/* FIXME: Should eventually save this to .local/share/rhythmbox/ipod/.
+	
+	/* FIXME: Should store all the ipod data in a single GKeyFile
 	 */
 	/* Build the filename */
-	filename = g_string_append( filename,
-				    rb_ipod_db_get_ipod_name (priv->ipod_db) );
+	g_object_get (source, "mount", &mount, NULL);
+	if (rb_ipod_helpers_get_serial ( mount ) != NULL) {
+		filename = g_string_append( filename,
+					    rb_ipod_helpers_get_serial ( mount ) );
+	} else {
+		filename = g_string_append( filename,
+					    rb_ipod_db_get_ipod_name (priv->ipod_db) );
+	}
 
 	/* Put the stuff to save into str */
 	/*

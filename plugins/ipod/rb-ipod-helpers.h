@@ -39,6 +39,7 @@ guint64 rb_ipod_helpers_get_capacity (const char *mountpoint);
 guint64 rb_ipod_helpers_get_free_space (const char *mountpoint);
 char *rb_ipod_helpers_get_device (RBSource *source);
 gboolean rb_ipod_helpers_is_ipod (GMount *mount);
+char *rb_ipod_helpers_get_serial (GMount *mount);
 gboolean rb_ipod_helpers_needs_init (GMount *mount);
 G_END_DECLS
 

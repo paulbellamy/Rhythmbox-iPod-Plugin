@@ -531,6 +531,100 @@ rb_ipod_helpers_is_ipod (GMount *mount)
 }
 #endif
 
+#ifdef HAVE_HAL
+static char *
+volume_get_serial (GVolume *volume)
+{
+	LibHalContext *ctx;
+	DBusConnection *conn;
+	char *parent_udi, *udi;
+	char *result;
+	DBusError error;
+	gboolean inited = FALSE;
+
+	result = NULL;
+	dbus_error_init (&error);
+
+	udi = NULL;
+	conn = NULL;
+
+	ctx = libhal_ctx_new ();
+	if (ctx == NULL) {
+		/* FIXME: should we return an error somehow so that we can
+		 * fall back to a check for iTunesDB presence instead ?
+		 */
+		rb_debug ("cannot connect to HAL");
+		goto end;
+	}
+	conn = dbus_bus_get (DBUS_BUS_SYSTEM, &error);
+	if (conn == NULL || dbus_error_is_set (&error))
+		goto end;
+
+	libhal_ctx_set_dbus_connection (ctx, conn);
+	if (!libhal_ctx_init (ctx, &error) || dbus_error_is_set (&error))
+		goto end;
+
+	udi = rb_gvolume_get_udi (volume, ctx);
+	if (udi == NULL)
+		goto end;
+
+	inited = TRUE;
+	parent_udi = libhal_device_get_property_string (ctx, udi,
+							"info.parent", &error);
+	if (parent_udi == NULL || dbus_error_is_set (&error))
+		goto end;
+	result = libhal_device_get_property_string (ctx, parent_udi,
+						    "usb_device.serial", &error);
+
+end:
+	g_free (parent_udi);
+	g_free (udi);
+
+	if (dbus_error_is_set (&error)) {
+		rb_debug ("Error: %s\n", error.message);
+		dbus_error_free (&error);
+		dbus_error_init (&error);
+	}
+
+	if (ctx) {
+		if (inited)
+			libhal_ctx_shutdown (ctx, &error);
+		libhal_ctx_free(ctx);
+	}
+
+	dbus_error_free (&error);
+
+	return result;
+}
+
+char *
+rb_ipod_helpers_get_serial (GMount *mount)
+{
+	char *result;
+	GVolume *volume;
+
+	volume = g_mount_get_volume (mount);
+	if (volume == NULL)
+		return NULL;
+
+	result = volume_get_serial (volume);
+	g_object_unref (volume);
+
+	return result;
+}
+
+#else
+
+char *
+rb_ipod_helpers_get_serial (GMount *mount)
+{
+	/* FIXME: What do we do to find the serial without HAL???
+	 */
+	 return "";
+}
+
+#endif
+
 gboolean rb_ipod_helpers_needs_init (GMount *mount)
 {
 	/* This function is a useless one-liner for now, but it should check
