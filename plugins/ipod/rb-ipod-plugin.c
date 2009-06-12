@@ -85,6 +85,9 @@ static void impl_deactivate (RBPlugin *plugin, RBShell *shell);
 static RBSource * create_source_cb (RBRemovableMediaManager *rmm,
 				    GMount *mount,
 				    RBIpodPlugin *plugin);
+				    
+static void  rb_ipod_plugin_cmd_sync (GtkAction *action,
+				      RBIpodPlugin *plugin);
 static void  rb_ipod_plugin_cmd_rename (GtkAction *action,
 					RBIpodPlugin *plugin);
 static void  rb_ipod_plugin_cmd_playlist_new (GtkAction *action,
@@ -101,6 +104,9 @@ RB_PLUGIN_REGISTER(RBIpodPlugin, rb_ipod_plugin)
 
 static GtkActionEntry rb_ipod_plugin_actions [] =
 {
+	{ "iPodSourceSync", GTK_STOCK_REFRESH, N_("_Sync"), NULL,
+	  N_("Sync iPod"),
+	  G_CALLBACK (rb_ipod_plugin_cmd_sync) },
 	{ "iPodSourceRename", NULL, N_("_Rename"), NULL,
 	  N_("Rename iPod"),
 	  G_CALLBACK (rb_ipod_plugin_cmd_rename) },
@@ -258,6 +264,24 @@ create_source_cb (RBRemovableMediaManager *rmm, GMount *mount, RBIpodPlugin *plu
 				 plugin, 0);
 
 	return src;
+}
+
+static void
+rb_ipod_plugin_cmd_sync (GtkAction *action,
+			 RBIpodPlugin *plugin)
+{
+	RBSource *source = NULL;
+
+	g_object_get (G_OBJECT (plugin->shell), 
+		      "selected-source", &source,
+		      NULL);
+	if ((source == NULL) || !RB_IS_IPOD_SOURCE (source)) {
+		g_critical ("got iPodSourceSync action for non-ipod source");
+		return;
+	}
+
+	rb_ipod_source_sync (RB_IPOD_SOURCE (source));
+	g_object_unref (G_OBJECT (source));
 }
 
 static void
