@@ -90,6 +90,9 @@ static gboolean rb_ipod_song_artwork_add_cb (RhythmDB *db,
                                              const GValue *metadata,
                                              RBiPodSource *isource);
 
+static gboolean	rb_ipod_source_load_file (RBiPodSource *source);
+static int	rb_ipod_source_save_file (RBiPodSource *source);
+
 static RhythmDB *get_db_for_source (RBiPodSource *source);
 
 static gboolean impl_get_sync_auto (RBiPodSource *source);
@@ -220,6 +223,8 @@ rb_ipod_source_constructor (GType type, guint n_construct_properties,
                                  G_CALLBACK (rb_ipod_song_artwork_add_cb),
                                  RB_IPOD_SOURCE(source), 0);
         g_object_unref (G_OBJECT (db));
+        
+        rb_ipod_source_load_file (RB_IPOD_SOURCE(source));
 
 	return G_OBJECT (source);
 }
@@ -707,6 +712,119 @@ add_ipod_song_to_db (RBiPodSource *source, RhythmDB *db, Itdb_Track *song)
 	rhythmdb_commit (RHYTHMDB (db));
 }
 
+
+static gboolean
+rb_ipod_source_load_file (RBiPodSource *source)
+{
+	char *pathname;
+	GString *filename = g_string_new( "ipod-" );
+	GFile *file;
+	GError *error = NULL;
+	char *data;
+	//char *start; // unused for now
+	//char *end;   // unused for now
+	gsize size;
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	
+	/* Build the filename */
+	filename = g_string_append( filename,
+				    itdb_device_get_sysinfo ( rb_ipod_db_get_device (priv->ipod_db),
+							      "pszSerialNumber") );
+
+	/* we don't really care about errors enough to report them here */
+	pathname = rb_find_user_data_file ((const char *)filename, NULL);
+	file = g_file_new_for_path (pathname);
+	rb_debug ("loading iPod data from \"%s\"", pathname);
+	g_free (pathname);
+
+	if (g_file_load_contents (file, NULL, &data, &size, NULL, &error) == FALSE) {
+		rb_debug ("unable to load iPod data: %s", error->message);
+		g_error_free (error);
+		return FALSE;
+	}
+
+	/* Parse the file */
+	/*
+	start = data;
+	while (start < (data + size)) {
+		RBiPodSourceEntry *entry;
+
+		*//* find the end of the line, to terminate the string *//*
+		end = g_utf8_strchr (start, -1, '\n');
+		if (end == NULL)
+			break;
+		*end = 0;
+
+		entry = rb_audioscrobbler_entry_load_from_string (start);
+		if (entry) {
+			g_queue_push_tail (audioscrobbler->priv->queue,
+					   entry);
+			audioscrobbler->priv->queue_count++;
+		}
+
+		start = end + 1;
+	}
+	*/
+
+	g_string_free( filename, TRUE );
+	g_free (data);
+	return TRUE;
+}
+
+static int
+rb_ipod_source_save_file (RBiPodSource *source)
+{
+	char *pathname;
+	GString *filename = g_string_new( "ipod-" );
+	GFile *file;
+	GError *error = NULL;
+	//GList *l;	// Unused for now
+	GString *str = g_string_new("");
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	
+	/* Build the filename */
+	filename = g_string_append( filename,
+				    itdb_device_get_sysinfo ( rb_ipod_db_get_device (priv->ipod_db),
+							      "pszSerialNumber") );
+
+	/* Put the stuff to save into str */
+	/*
+	for (l = audioscrobbler->priv->queue->head; l != NULL; l = g_list_next (l)) {
+		AudioscrobblerEntry *entry;
+
+		entry = (AudioscrobblerEntry *) l->data;
+		rb_audioscrobbler_entry_save_to_string (str, entry);
+	}
+	*/
+	/* we don't really care about errors enough to report them here */
+	pathname = rb_find_user_data_file ("ipod-UUID", NULL);
+	rb_debug ("Saving iPod data to \"%s\"", pathname);
+
+	file = g_file_new_for_path (pathname);
+	g_free (pathname);
+
+	g_file_replace_contents (file,
+				 str->str, str->len,
+				 NULL,
+				 FALSE,
+				 G_FILE_CREATE_NONE,
+				 NULL,
+				 NULL,
+				 &error);
+	
+	g_string_free( filename, TRUE );
+	g_string_free (str, TRUE);
+
+	if (error == NULL) {
+		return TRUE;
+	} else {
+		rb_debug ("error saving iPod data: %s",
+			  error->message);
+		g_error_free (error);
+		return FALSE;
+	}
+}
+
 static RhythmDB *
 get_db_for_source (RBiPodSource *source)
 {
@@ -733,6 +851,7 @@ impl_set_sync_auto (RBiPodSource *source, gboolean value)
 {
 	/* FIXME: STUB
 	 */
+	rb_ipod_source_save_file (source);
 }
 
 static gboolean
@@ -748,6 +867,7 @@ impl_set_sync_music (RBiPodSource *source, gboolean value)
 {
 	/* FIXME: STUB
 	 */
+	rb_ipod_source_save_file (source);
 }
 
 static gboolean
@@ -763,6 +883,7 @@ impl_set_sync_podcasts (RBiPodSource *source, gboolean value)
 {
 	/* FIXME: STUB
 	 */
+	rb_ipod_source_save_file (source);
 }
 
 static gint
