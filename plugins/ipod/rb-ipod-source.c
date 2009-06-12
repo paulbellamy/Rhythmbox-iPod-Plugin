@@ -726,13 +726,15 @@ rb_ipod_source_load_file (RBiPodSource *source)
 	gsize size;
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
 	
+	
+	/* FIXME: Should eventually look for this in .local/share/rhythmbox/ipod/.
+	 */
 	/* Build the filename */
 	filename = g_string_append( filename,
-				    itdb_device_get_sysinfo ( rb_ipod_db_get_device (priv->ipod_db),
-							      "pszSerialNumber") );
+				    rb_ipod_db_get_ipod_name (priv->ipod_db) );
 
 	/* we don't really care about errors enough to report them here */
-	pathname = rb_find_user_data_file ((const char *)filename, NULL);
+	pathname = rb_find_user_data_file (filename->str, NULL);
 	file = g_file_new_for_path (pathname);
 	rb_debug ("loading iPod data from \"%s\"", pathname);
 	g_free (pathname);
@@ -782,10 +784,11 @@ rb_ipod_source_save_file (RBiPodSource *source)
 	GString *str = g_string_new("");
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
 	
+	/* FIXME: Should eventually save this to .local/share/rhythmbox/ipod/.
+	 */
 	/* Build the filename */
 	filename = g_string_append( filename,
-				    itdb_device_get_sysinfo ( rb_ipod_db_get_device (priv->ipod_db),
-							      "pszSerialNumber") );
+				    rb_ipod_db_get_ipod_name (priv->ipod_db) );
 
 	/* Put the stuff to save into str */
 	/*
@@ -797,7 +800,7 @@ rb_ipod_source_save_file (RBiPodSource *source)
 	}
 	*/
 	/* we don't really care about errors enough to report them here */
-	pathname = rb_find_user_data_file ("ipod-UUID", NULL);
+	pathname = rb_find_user_data_file (filename->str, NULL);
 	rb_debug ("Saving iPod data to \"%s\"", pathname);
 
 	file = g_file_new_for_path (pathname);
