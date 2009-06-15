@@ -2006,8 +2006,10 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		// Figure the size needed to transfer
 		
 		// Fill our hash tables for music
-		//g_hash_table_insert (itinerary_hash, g_strdup (key), g_strdup (value) );
-		//g_hash_table_insert (ipod_hash, g_strdup (key), g_strdup (value) );
+		// foreach(item in the itinerary)
+		// 	g_hash_table_insert (itinerary_hash, g_strdup (key), g_strdup (value) );
+		// foreach(item on the ipod)
+		//	g_hash_table_insert (ipod_hash, g_strdup (key), g_strdup (value) );
 		
 		// Build the list of stuff to remove! (on ipod, but not in itinerary)
 		//g_hash_table_foreach (ipod_hash,

@@ -638,15 +638,32 @@ guint
 rb_ipod_helpers_track_hash  (gconstpointer v)
 {
 	/* This function is for hashing the two databases for syncing. */
-	return 0;
+	GString *str = g_string_new ( rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_TITLE) );
+	
+	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ARTIST));
+	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_DURATION));
+	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ALBUM));
+	
+	/* FIXME: The below might be needed for hashing podcasts properly,
+	 * but it gives "dereferencing to incomplete type"
+	 *
+	// If it is a podcast
+	if (((RhythmDBEntry *)v)->type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST)
+		g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_POST_TIME));
+	*/
+	
+	guint result = g_str_hash ( str );
+	
+	g_string_free ( str, TRUE );
+	
+	return result;
 }
 
 gboolean
 rb_ipod_helpers_track_equal (gconstpointer v1,
 			     gconstpointer v2)
 {
-	/* This function is for hashing the two databases for syncing. */
-	return 0;
-	
+	/* This function is for telling if two tracks are identical. */
+	return (rb_ipod_helpers_track_hash (v1) == rb_ipod_helpers_track_hash (v2));
 }
 
