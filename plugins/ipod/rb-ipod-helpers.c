@@ -620,7 +620,7 @@ rb_ipod_helpers_get_serial (GMount *mount)
 {
 	/* FIXME: What do we do to find the serial without HAL???
 	 */
-	 return "";
+	 return NULL;
 }
 
 #endif
@@ -633,3 +633,20 @@ gboolean rb_ipod_helpers_needs_init (GMount *mount)
 	 */
 	return (!rb_ipod_helpers_mount_has_ipod_db (mount));
 }
+
+guint
+rb_ipod_helpers_track_hash  (gconstpointer v)
+{
+	/* This function is for hashing the two databases for syncing. */
+	return 0;
+}
+
+gboolean
+rb_ipod_helpers_track_equal (gconstpointer v1,
+			     gconstpointer v2)
+{
+	/* This function is for hashing the two databases for syncing. */
+	return 0;
+	
+}
+

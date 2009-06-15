@@ -1992,40 +1992,37 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	/* FIXME: this is a pretty ugly skeleton function.
 	 * 
 	 */
+	GHashTable *itinerary_hash = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTable *ipod_hash =	g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
 	GList	*to_add = NULL; // Files to go onto the iPod
 	GList	*to_remove = NULL; // Files to be removed from the iPod
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
  	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
- 	//gpointer lib_track = NULL;	// Unused yet
-	//Itdb_Track *itdb_track = NULL;// Unused yet
 	
 	// Calculate How much Music needs transferring
 	if (impl_get_sync_music (ipod_source)) {
 		// Find differences between iPod and Itenerary
 		// Figure the size needed to transfer
 		
-		/* FIXME: This is not correct! Just here to illustrate the idea!
-		 *  If the lists are sorted alphabetically we can go through and
-		 *  pick out any differences.
-		while (lib_track != NULL && itdb_track != NULL) {
-			if (strcmp (lib_track->name, itdb_track->name) == 0) {
-				// Tracks are equivalent move with both ptrs
-				lib_track++;
-				itdb_track++;
-			} else if (strcmp (lib_track->name, itdb_track->name) < 0 ) {
-				// Item is in itinerary, but not on ipod
-				to_add = g_list_append(to_add, lib_track);
-				space_needed_music += sizeof(lib_track);
-				lib_track++;
-			} else {
-				// Item is on ipod but not in itinerary
-				to_remove = g_list_append(to_remove, itdb_track);
-				space_needed_music -= sizeof(itdb_track);
-				itdb_track++;
-			}
-		}
-		*/
+		// Fill our hash tables for music
+		//g_hash_table_insert (itinerary_hash, g_strdup (key), g_strdup (value) );
+		//g_hash_table_insert (ipod_hash, g_strdup (key), g_strdup (value) );
+		
+		// Build the list of stuff to remove! (on ipod, but not in itinerary)
+		//g_hash_table_foreach (ipod_hash,
+		//			GHFunc func, // function to add to remove list if necessary
+		//			gpointer user_data);
+		
+		
+		// Build the list of stuff to add! (in itinerary, but not on ipod)
+		//g_hash_table_foreach (itinerary_hash,
+		//			GHFunc func,
+		//			gpointer user_data);
+		
+		// Empty the hash tables
+		g_hash_table_remove_all (itinerary_hash);
+		g_hash_table_remove_all (ipod_hash);
 	}
 	
 	// Calculate How much Podcasts need transferring
