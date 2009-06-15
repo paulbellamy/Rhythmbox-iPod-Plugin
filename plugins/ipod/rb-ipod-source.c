@@ -101,9 +101,15 @@ static void impl_set_sync_auto (RBiPodSource *source,
 static gboolean impl_get_sync_music (RBiPodSource *source);
 static void impl_set_sync_music (RBiPodSource *source,
 				 gboolean value);
+static gboolean impl_get_sync_music_all (RBiPodSource *source);
+static void impl_set_sync_music_all (RBiPodSource *source,
+				     gboolean value);
 static gboolean impl_get_sync_podcasts (RBiPodSource *source);
 static void impl_set_sync_podcasts (RBiPodSource *source,
 				   gboolean value);
+static gboolean impl_get_sync_podcasts_all (RBiPodSource *source);
+static void impl_set_sync_podcasts_all (RBiPodSource *source,
+					gboolean value);
 
 struct _PlayedEntry {
 	RhythmDBEntry *entry;
@@ -717,68 +723,58 @@ static gboolean
 rb_ipod_source_load_file (RBiPodSource *source)
 {
 	char *pathname;
-	GString *filename = g_string_new( "ipod-" );
-	GFile *file;
+	GKeyFile *key_file = g_key_file_new();
+	GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS;
+	const gchar *group;
 	GError *error = NULL;
-	char *data;
 	//char *start; // unused for now
 	//char *end;   // unused for now
-	gsize size;
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
 	GMount *mount;
 	
-	
 	/* FIXME: Should store all the ipod data in a single GKeyFile
 	 */
-	/* Build the filename */
-	g_object_get (source, "mount", &mount, NULL);
-	if (rb_ipod_helpers_get_serial ( mount ) != NULL) {
-		filename = g_string_append( filename,
-					    rb_ipod_helpers_get_serial ( mount ) );
-	} else {
-		filename = g_string_append( filename,
-					    rb_ipod_db_get_ipod_name (priv->ipod_db) );
-	}
-
-	/* we don't really care about errors enough to report them here */
-	pathname = rb_find_user_data_file (filename->str, NULL);
-	file = g_file_new_for_path (pathname);
+	pathname = rb_find_user_data_file ("ipod-plugin.conf", NULL);
 	rb_debug ("loading iPod data from \"%s\"", pathname);
-	g_free (pathname);
-
-	if (g_file_load_contents (file, NULL, &data, &size, NULL, &error) == FALSE) {
+	if ( !g_key_file_load_from_file (key_file, pathname, flags, &error) ) {
 		rb_debug ("unable to load iPod data: %s", error->message);
 		g_error_free (error);
+		g_free(pathname);
 		return FALSE;
 	}
-
-	/* Parse the file */
-	/*
-	start = data;
-	while (start < (data + size)) {
-		RBiPodSourceEntry *entry;
-
-		*//* find the end of the line, to terminate the string *//*
-		end = g_utf8_strchr (start, -1, '\n');
-		if (end == NULL)
-			break;
-		*end = 0;
-
-		entry = rb_audioscrobbler_entry_load_from_string (start);
-		if (entry) {
-			g_queue_push_tail (audioscrobbler->priv->queue,
-					   entry);
-			audioscrobbler->priv->queue_count++;
-		}
-
-		start = end + 1;
+	
+	g_free(pathname);
+	
+	g_object_get (source, "mount", &mount, NULL);
+	if (rb_ipod_helpers_get_serial ( mount ) != NULL) {
+		group = rb_ipod_helpers_get_serial ( mount );
+	} else {
+		group = rb_ipod_db_get_ipod_name (priv->ipod_db);
 	}
-	*/
+	
+	if ( g_key_file_has_group(key_file, group) ) {
+		impl_set_sync_auto	( source, g_key_file_get_boolean (key_file, group, "sync_auto", &error) );
+		impl_set_sync_music	( source, g_key_file_get_boolean (key_file, group, "sync_music", &error) );
+		impl_set_sync_music_all	( source, g_key_file_get_boolean (key_file, group, "sync_music_all", &error) );
+		impl_set_sync_podcasts	( source, g_key_file_get_boolean (key_file, group, "sync_podcasts", &error) );
+		impl_set_sync_podcasts_all ( source, g_key_file_get_boolean (key_file, group, "sync_podcasts_all", &error) );
+		/* FIXME: Needs to load the list of playlists and tracks to sync
+		 * gchar **g_key_file_get_string_list ( key_file, group, const gchar *key, NULL, &error);
+		 */
+	} else {
+		/* FIXME: Needs to add a group, if it doesn't exist.
+		 */
+	}
+	
 
-	g_string_free( filename, TRUE );
-	g_free (data);
+	g_key_file_free(key_file);
+	
+	/* FIXME: This shouldn't be here, just here so the below function is used. */
+	rb_ipod_source_save_file(source);
+
 	return TRUE;
 }
+
 
 static int
 rb_ipod_source_save_file (RBiPodSource *source)
@@ -843,6 +839,7 @@ rb_ipod_source_save_file (RBiPodSource *source)
 	}
 }
 
+
 static RhythmDB *
 get_db_for_source (RBiPodSource *source)
 {
@@ -869,7 +866,6 @@ impl_set_sync_auto (RBiPodSource *source, gboolean value)
 {
 	/* FIXME: STUB
 	 */
-	rb_ipod_source_save_file (source);
 }
 
 static gboolean
@@ -885,7 +881,22 @@ impl_set_sync_music (RBiPodSource *source, gboolean value)
 {
 	/* FIXME: STUB
 	 */
-	rb_ipod_source_save_file (source);
+	
+}
+
+static gboolean
+impl_get_sync_music_all (RBiPodSource *source)
+{
+	/* FIXME: STUB
+	 */
+	return FALSE;
+}
+
+static void
+impl_set_sync_music_all (RBiPodSource *source, gboolean value)
+{
+	/* FIXME: STUB
+	 */
 }
 
 static gboolean
@@ -901,7 +912,21 @@ impl_set_sync_podcasts (RBiPodSource *source, gboolean value)
 {
 	/* FIXME: STUB
 	 */
-	rb_ipod_source_save_file (source);
+}
+
+static gboolean
+impl_get_sync_podcasts_all (RBiPodSource *source)
+{
+	/* FIXME: STUB
+	 */
+	return FALSE;
+}
+
+static void
+impl_set_sync_podcasts_all (RBiPodSource *source, gboolean value)
+{
+	/* FIXME: STUB
+	 */
 }
 
 static gint
@@ -1789,7 +1814,7 @@ ipod_name_changed_cb (GtkWidget     *widget,
 
 static void
 rb_ipod_sync_auto_changed_cb (GtkToggleButton *togglebutton,
-			     gpointer         user_data)
+			      gpointer         user_data)
 {
 		impl_set_sync_auto (RB_IPOD_SOURCE (user_data),
 				   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
@@ -1797,18 +1822,34 @@ rb_ipod_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 
 static void
 rb_ipod_sync_music_changed_cb (GtkToggleButton *togglebutton,
-			     gpointer         user_data)
+			       gpointer         user_data)
 {
 		impl_set_sync_music (RB_IPOD_SOURCE (user_data),
 				   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
 }
 
 static void
+rb_ipod_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
+				   gpointer         user_data)
+{
+		impl_set_sync_music_all (RB_IPOD_SOURCE (user_data),
+					 gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
+}
+
+static void
 rb_ipod_sync_podcasts_changed_cb (GtkToggleButton *togglebutton,
-			     gpointer         user_data)
+				  gpointer         user_data)
 {
 		impl_set_sync_podcasts (RB_IPOD_SOURCE (user_data),
 				   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
+}
+
+static void
+rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
+				      gpointer         user_data)
+{
+		impl_set_sync_podcasts_all (RB_IPOD_SOURCE (user_data),
+					    gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
 }
 
 void
@@ -1903,11 +1944,23 @@ rb_ipod_source_show_properties (RBiPodSource *source)
  	g_signal_connect (label, "toggled",
  			  (GCallback)rb_ipod_sync_music_changed_cb, source);
 	
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-music-all");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_music_all (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_music_all_changed_cb, source);
+	
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-podcasts");
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      impl_get_sync_podcasts (source));
  	g_signal_connect (label, "toggled",
  			  (GCallback)rb_ipod_sync_podcasts_changed_cb, source);
+
+	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-podcasts-all");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      impl_get_sync_podcasts_all (source));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_ipod_sync_podcasts_all_changed_cb, source);
 
 	label = gtk_builder_get_object (builder, "label-device-node-value");
 	text = rb_ipod_helpers_get_device (RB_SOURCE(source));
