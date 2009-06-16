@@ -66,6 +66,8 @@ typedef struct
 	guint ui_merge_id;
 
 	GList *ipod_sources;
+	
+	GKeyFile *key_file;
 } RBIpodPlugin;
 
 typedef struct
@@ -214,6 +216,7 @@ impl_deactivate	(RBPlugin *bplugin,
 		      "removable-media-manager", &rmm,
 		      "ui-manager", &uimanager,
 		      NULL);
+		      
 
 	gtk_ui_manager_remove_ui (uimanager, plugin->ui_merge_id);
 	gtk_ui_manager_remove_action_group (uimanager, plugin->action_group);
@@ -223,6 +226,11 @@ impl_deactivate	(RBPlugin *bplugin,
 	g_list_foreach (plugin->ipod_sources, (GFunc)rb_source_delete_thyself, NULL);
 	g_list_free (plugin->ipod_sources);
 	plugin->ipod_sources = NULL;
+	
+	if (plugin->key_file) {
+		g_key_file_free ( plugin->key_file );
+		plugin->key_file = NULL;
+	}
 
 	g_object_unref (G_OBJECT (uimanager));
 	g_object_unref (G_OBJECT (rmm));
@@ -256,7 +264,7 @@ create_source_cb (RBRemovableMediaManager *rmm, GMount *mount, RBIpodPlugin *plu
 
 	src = RB_SOURCE (rb_ipod_source_new (RB_PLUGIN (plugin),
 					     plugin->shell,
-					     mount));
+					     mount, &plugin->keyfile));
 
 	plugin->ipod_sources = g_list_prepend (plugin->ipod_sources, src);
 	g_signal_connect_object (G_OBJECT (src),

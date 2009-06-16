@@ -50,6 +50,7 @@
 #include "rb-util.h"
 #include "rhythmdb.h"
 #include "rb-cut-and-paste-code.h"
+#include "rb-ipod-prefs.h"
 
 #define CONF_STATE_PANED_POSITION CONF_PREFIX "/state/ipod/paned_position"
 #define CONF_STATE_SHOW_BROWSER   CONF_PREFIX "/state/ipod/show_browser"
@@ -132,6 +133,8 @@ typedef struct
 	guint artwork_notify_id;
 
 	GQueue *offline_plays;
+	
+	RBiPodPrefs *prefs;
 } RBiPodSourcePrivate;
 
 typedef struct {
@@ -273,6 +276,10 @@ rb_ipod_source_dispose (GObject *object)
 		g_queue_free (priv->offline_plays);
 		priv->offline_plays = NULL;
 	}
+	
+	if (priv->prefs) {
+		G_OBJECT (prefs)->dispose (object);
+	}
 
 	G_OBJECT_CLASS (rb_ipod_source_parent_class)->dispose (object);
 }
@@ -280,7 +287,8 @@ rb_ipod_source_dispose (GObject *object)
 RBRemovableMediaSource *
 rb_ipod_source_new (RBPlugin *plugin,
 		    RBShell *shell,
-		    GMount *mount)
+		    GMount *mount,
+		    GKeyFile *key_file)
 {
 	RBiPodSource *source;
 	RhythmDBEntryType entry_type;
@@ -301,6 +309,8 @@ rb_ipod_source_new (RBPlugin *plugin,
 	g_object_unref (db);
 	g_free (name);
 	g_free (path);
+	
+	RBiPodPrefs *prefs = rb_ipod_prefs_new ( &key_file, source );
 
 	source = RB_IPOD_SOURCE (g_object_new (RB_TYPE_IPOD_SOURCE,
 				               "plugin", plugin,
@@ -308,6 +318,7 @@ rb_ipod_source_new (RBPlugin *plugin,
 					       "mount", mount,
 					       "shell", shell,
 					       "source-group", RB_SOURCE_GROUP_DEVICES,
+					       "prefs", prefs,
 					       NULL));
 
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);
@@ -775,71 +786,6 @@ rb_ipod_source_load_file (RBiPodSource *source)
 	return TRUE;
 }
 
-
-static int
-rb_ipod_source_save_file (RBiPodSource *source)
-{
-	char *pathname;
-	GString *filename = g_string_new( "ipod-" );
-	GFile *file;
-	GError *error = NULL;
-	//GList *l;	// Unused for now
-	GString *str = g_string_new("");
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	GMount *mount;
-	
-	
-	/* FIXME: Should store all the ipod data in a single GKeyFile
-	 */
-	/* Build the filename */
-	g_object_get (source, "mount", &mount, NULL);
-	if (rb_ipod_helpers_get_serial ( mount ) != NULL) {
-		filename = g_string_append( filename,
-					    rb_ipod_helpers_get_serial ( mount ) );
-	} else {
-		filename = g_string_append( filename,
-					    rb_ipod_db_get_ipod_name (priv->ipod_db) );
-	}
-
-	/* Put the stuff to save into str */
-	/*
-	for (l = audioscrobbler->priv->queue->head; l != NULL; l = g_list_next (l)) {
-		AudioscrobblerEntry *entry;
-
-		entry = (AudioscrobblerEntry *) l->data;
-		rb_audioscrobbler_entry_save_to_string (str, entry);
-	}
-	*/
-	/* we don't really care about errors enough to report them here */
-	pathname = rb_find_user_data_file (filename->str, NULL);
-	rb_debug ("Saving iPod data to \"%s\"", pathname);
-
-	file = g_file_new_for_path (pathname);
-	g_free (pathname);
-
-	g_file_replace_contents (file,
-				 str->str, str->len,
-				 NULL,
-				 FALSE,
-				 G_FILE_CREATE_NONE,
-				 NULL,
-				 NULL,
-				 &error);
-	
-	g_string_free( filename, TRUE );
-	g_string_free (str, TRUE);
-
-	if (error == NULL) {
-		return TRUE;
-	} else {
-		rb_debug ("error saving iPod data: %s",
-			  error->message);
-		g_error_free (error);
-		return FALSE;
-	}
-}
-
-
 static RhythmDB *
 get_db_for_source (RBiPodSource *source)
 {
@@ -851,75 +797,6 @@ get_db_for_source (RBiPodSource *source)
 	g_object_unref (shell);
 
 	return db;
-}
-
-static gboolean
-impl_get_sync_auto (RBiPodSource *source)
-{
-	/* FIXME: STUB
-	 */
-	return FALSE;
-}
-
-static void
-impl_set_sync_auto (RBiPodSource *source, gboolean value)
-{
-	/* FIXME: STUB
-	 */
-}
-
-static gboolean
-impl_get_sync_music (RBiPodSource *source)
-{
-	/* FIXME: STUB
-	 */
-	return FALSE;
-}
-
-static void
-impl_set_sync_music (RBiPodSource *source, gboolean value)
-{
-	/* FIXME: STUB
-	 */
-	
-}
-
-static gboolean
-impl_get_sync_music_all (RBiPodSource *source)
-{
-	/* FIXME: STUB
-	 */
-	return FALSE;
-}
-
-static void
-impl_set_sync_music_all (RBiPodSource *source, gboolean value)
-{
-	/* FIXME: STUB
-	 */
-}
-
-static gboolean
-impl_get_sync_podcasts (RBiPodSource *source)
-{
-	/* FIXME: STUB
-	 */
-	return FALSE;
-}
-
-static void
-impl_set_sync_podcasts (RBiPodSource *source, gboolean value)
-{
-	/* FIXME: STUB
-	 */
-}
-
-static gboolean
-impl_get_sync_podcasts_all (RBiPodSource *source)
-{
-	/* FIXME: STUB
-	 */
-	return FALSE;
 }
 
 static void
@@ -1992,11 +1869,11 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	/* FIXME: this is a pretty ugly skeleton function.
 	 * 
 	 */
-	GHashTable *itinerary_hash = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
-	GHashTable *ipod_hash =	g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTable *itinerary_sync_hash = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTable *ipod_sync_hash =	g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
 	GList	*to_add = NULL; // Files to go onto the iPod
 	GList	*to_remove = NULL; // Files to be removed from the iPod
-	GList	*iter = NULL;
+	gchar	*iter = NULL;
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
@@ -2006,7 +1883,16 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	// g_hash_table_lookup (hash_table, RhythmDBEntry *entry); // to check if "entry" is in "hash_table"
 	
 	// duplicate priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_copy_value, ipod_hash );
+	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_insert, ipod_sync_hash );
+	
+	/* FIXME: the below is broken
+	 */
+	for ( iter = rb_ipod_prefs_get_entries(priv->prefs->sync_entries);
+	      iter != NULL;
+	      iter++ )
+	{
+		rb_ipod_helpers_hash_table_insert ( 0, 0, itinerary_sync_hash );
+	}
 	
 	// fill the itinerary_hash from GKeyFile
 	if ( impl_get_sync_music_all (ipod_source) ) {
@@ -2033,8 +1919,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	//			gpointer user_data);
 	
 	// Empty the hash tables
-	g_hash_table_remove_all (itinerary_hash);
-	g_hash_table_remove_all (ipod_hash);
+	g_hash_table_remove_all (itinerary_sync_hash);
+	g_hash_table_remove_all (ipod_sync_hash);
 	
 	// Calculate How much Music needs transferring
 	if (impl_get_sync_music (ipod_source)) {
