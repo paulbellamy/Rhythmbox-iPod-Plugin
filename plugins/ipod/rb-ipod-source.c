@@ -1996,41 +1996,55 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	GHashTable *ipod_hash =	g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
 	GList	*to_add = NULL; // Files to go onto the iPod
 	GList	*to_remove = NULL; // Files to be removed from the iPod
+	GList	*iter = NULL;
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
- 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	
+	// Fill our hash tables
+	// priv->entry_map is a hash_table of the ipod.  We just need to build one of the itinerary.
+	// g_hash_table_lookup (hash_table, RhythmDBEntry *entry); // to check if "entry" is in "hash_table"
+	
+	// duplicate priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
+	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_copy_value, ipod_hash );
+	
+	// fill the itinerary_hash from GKeyFile
+	if ( impl_get_sync_music_all (ipod_source) ) {
+		// g_hash_table_insert (itinerary_hash, g_strdup (key), g_strdup (value) );
+	} else {
+		
+	}
+	
+	if (impl_get_sync_podcasts_all (ipod_source) ) {
+		
+	} else {
+		
+	}
+	
+	// Build the list of stuff to remove! (on ipod, but not in itinerary)
+	//g_hash_table_foreach (priv->entry_map,
+	//			GHFunc func, // function to add to remove list if necessary
+	//			gpointer user_data);
+	
+	
+	// Build the list of stuff to add! (in itinerary, but not on ipod)
+	//g_hash_table_foreach (itinerary_hash,
+	//			GHFunc func, // function to add to add list if necessary
+	//			gpointer user_data);
+	
+	// Empty the hash tables
+	g_hash_table_remove_all (itinerary_hash);
+	g_hash_table_remove_all (ipod_hash);
 	
 	// Calculate How much Music needs transferring
 	if (impl_get_sync_music (ipod_source)) {
-		// Find differences between iPod and Itenerary
-		// Figure the size needed to transfer
-		
-		// Fill our hash tables for music
-		// foreach(item in the itinerary)
-		// 	g_hash_table_insert (itinerary_hash, g_strdup (key), g_strdup (value) );
-		// foreach(item on the ipod)
-		//	g_hash_table_insert (ipod_hash, g_strdup (key), g_strdup (value) );
-		
-		// Build the list of stuff to remove! (on ipod, but not in itinerary)
-		//g_hash_table_foreach (ipod_hash,
-		//			GHFunc func, // function to add to remove list if necessary
-		//			gpointer user_data);
-		
-		
-		// Build the list of stuff to add! (in itinerary, but not on ipod)
-		//g_hash_table_foreach (itinerary_hash,
-		//			GHFunc func,
-		//			gpointer user_data);
-		
-		// Empty the hash tables
-		g_hash_table_remove_all (itinerary_hash);
-		g_hash_table_remove_all (ipod_hash);
+		// How big is all the music in the to_add list?
+		// FIXME: This seem inefficient
 	}
 	
 	// Calculate How much Podcasts need transferring
 	if (impl_get_sync_podcasts (ipod_source)) {
-		// Find podcast differences between iPod and Itinerary
-		// Figure the size needed to transfer
+		// How big are all the podcasts in the to_add list?
 		// FIXME: This needs to be similar to the above, but for podcasts
 	}
 	
@@ -2044,8 +2058,11 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	 * This needs to actually remove them from the iPod.
 	 *  Is there a remove function?
 	while(to_remove.hasNext ()) {
-		itdb_track = to_remove.getNext();
-		rb_ipod_db_track_remove (priv->ipod_db, itdb_track);
+		if ( (impl_get_sync_music(ipod_source) && itdb_track.isMusic())
+			|| (impl_get_sync_podcasts(ipod_source) && itdb_track.is_Podcast()) ) {
+			itdb_track = to_remove.getNext();
+			rb_ipod_db_track_remove (priv->ipod_db, itdb_track);
+		}
 	}
 	*/
 	
@@ -2057,8 +2074,11 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	 * This needs to actually transfer them to the iPod.
 	 *  Is there a remove function?
 	while(to_add.hasNext ()) {
-		lib_track = to_add.getNext();
-		rb_ipod_db_track_add (priv->ipod_db, lib_track);
+		if ( (impl_get_sync_music(ipod_source) && lib_track.isMusic())
+			|| (impl_get_sync_podcasts(ipod_source) && lib_track.is_Podcast()) ) {
+			lib_track = to_add.getNext();
+			rb_ipod_db_track_add (priv->ipod_db, lib_track);
+		}
 	}
 	*/
 	
