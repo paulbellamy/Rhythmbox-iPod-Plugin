@@ -91,26 +91,7 @@ static gboolean rb_ipod_song_artwork_add_cb (RhythmDB *db,
                                              const GValue *metadata,
                                              RBiPodSource *isource);
 
-static gboolean	rb_ipod_source_load_file (RBiPodSource *source);
-static int	rb_ipod_source_save_file (RBiPodSource *source);
-
 static RhythmDB *get_db_for_source (RBiPodSource *source);
-
-static gboolean impl_get_sync_auto (RBiPodSource *source);
-static void impl_set_sync_auto (RBiPodSource *source,
-				gboolean value);
-static gboolean impl_get_sync_music (RBiPodSource *source);
-static void impl_set_sync_music (RBiPodSource *source,
-				 gboolean value);
-static gboolean impl_get_sync_music_all (RBiPodSource *source);
-static void impl_set_sync_music_all (RBiPodSource *source,
-				     gboolean value);
-static gboolean impl_get_sync_podcasts (RBiPodSource *source);
-static void impl_set_sync_podcasts (RBiPodSource *source,
-				   gboolean value);
-static gboolean impl_get_sync_podcasts_all (RBiPodSource *source);
-static void impl_set_sync_podcasts_all (RBiPodSource *source,
-					gboolean value);
 
 struct _PlayedEntry {
 	RhythmDBEntry *entry;
@@ -232,8 +213,6 @@ rb_ipod_source_constructor (GType type, guint n_construct_properties,
                                  G_CALLBACK (rb_ipod_song_artwork_add_cb),
                                  RB_IPOD_SOURCE(source), 0);
         g_object_unref (G_OBJECT (db));
-        
-        rb_ipod_source_load_file (RB_IPOD_SOURCE(source));
 
 	return G_OBJECT (source);
 }
@@ -1883,16 +1862,20 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	// g_hash_table_lookup (hash_table, RhythmDBEntry *entry); // to check if "entry" is in "hash_table"
 	
 	// duplicate priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_insert, ipod_sync_hash );
+	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_insert_value, ipod_sync_hash );
+	
+	rb_ipod_helpers_hash_table_insert_value ( 0, 0, itinerary_sync_hash);
 	
 	/* FIXME: the below is broken
 	 */
+	/*
 	for ( iter = rb_ipod_prefs_get_entries(priv->prefs->sync_entries);
 	      iter != NULL;
 	      iter++ )
 	{
-		rb_ipod_helpers_hash_table_insert ( 0, 0, itinerary_sync_hash );
+		rb_ipod_helpers_hash_table_insert_value ( 0, 0, itinerary_sync_hash );
 	}
+	*/
 	
 	// fill the itinerary_hash from GKeyFile
 	if ( impl_get_sync_music_all (ipod_source) ) {

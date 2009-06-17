@@ -667,10 +667,10 @@ rb_ipod_helpers_track_equal (gconstpointer v1,
 	return (rb_ipod_helpers_track_hash (v1) == rb_ipod_helpers_track_hash (v2));
 }
 
-static void
-rb_ipod_helpers_hash_table_insert ( gpointer key,
-				    gpointer value,
-				    gpointer hash_table )
+void
+rb_ipod_helpers_hash_table_insert_value ( gpointer key,
+					  gpointer value,
+					  gpointer hash_table )
 {
 	g_hash_table_insert ( hash_table, key, value );
 }

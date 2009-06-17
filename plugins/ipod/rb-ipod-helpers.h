@@ -44,6 +44,9 @@ gboolean rb_ipod_helpers_needs_init (GMount *mount);
 guint    rb_ipod_helpers_track_hash  (gconstpointer v);
 gboolean rb_ipod_helpers_track_equal (gconstpointer v1,
 				      gconstpointer v2);
+void rb_ipod_helpers_hash_table_insert_value (gpointer key,
+					      gpointer value,
+					      gpointer hash_table);
 G_END_DECLS
 
 #endif /* __RB_IPOD_HELPERS_H */

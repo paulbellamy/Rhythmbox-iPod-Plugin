@@ -29,36 +29,31 @@
 #ifndef __RB_IPOD_PREFS_H
 #define __RB_IPOD_PREFS_H
 
+#include <gio/gio.h>
+//#include <gdk-pixbuf/gdk-pixbuf.h>
+#include "rb-ipod-source.h"
+
 G_BEGIN_DECLS
 
 #define RB_TYPE_IPOD_PREFS         (rb_ipod_prefs_get_type ())
-#define RB_IPOD_PREFS(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), RB_TYPE_IPOD_PREFS, RbIpodPrefs))
-#define RB_IPOD_PREFS_CLASS(k)     (G_TYPE_CHECK_CLASS_CAST((k), RB_TYPE_IPOD_PREFS, RbIpodPrefsClass))
+#define RB_IPOD_PREFS(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), RB_TYPE_IPOD_PREFS, RBiPodPrefs))
+#define RB_IPOD_PREFS_CLASS(k)     (G_TYPE_CHECK_CLASS_CAST((k), RB_TYPE_IPOD_PREFS, RBiPodPrefsClass))
 #define RB_IS_IPOD_PREFS(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), RB_TYPE_IPOD_PREFS))
 #define RB_IS_IPOD_PREFS_CLASS(k)  (G_TYPE_CHECK_CLASS_TYPE ((k), RB_TYPE_IPOD_PREFS))
-#define RB_IPOD_PREFS_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), RB_TYPE_IPOD_PREFS, RbIpodPrefsClass))
-
-enum {
-	SYNC_AUTO
-	SYNC_MUSIC,
-	SYNC_MUSIC_ALL,
-	SYNC_PODCASTS,
-	SYNC_PODCASTS_ALL
-	SYNC_ENTRIES
-};
+#define RB_IPOD_PREFS_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), RB_TYPE_IPOD_PREFS, RBiPodPrefsClass))
 
 typedef struct 
 {
 	GObject parent;
-} RbiPodPrefs;
+} RBiPodPrefs;
 
 typedef struct
 {
 	GObjectClass parent;
-} RbiPodPrefsClass;
+} RBiPodPrefsClass;
 
 
-RbIpodPrefs *rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source );
+RBiPodPrefs *rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source );
 GType rb_ipod_prefs_get_type (void);
 
 #endif
