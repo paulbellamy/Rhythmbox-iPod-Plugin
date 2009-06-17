@@ -32,16 +32,6 @@
 #include "rb-ipod-helpers.h"
 #include "rb-debug.h"
 
-enum {
-	SYNC_AUTO,
-	SYNC_MUSIC,
-	SYNC_MUSIC_ALL,
-	SYNC_PODCASTS,
-	SYNC_PODCASTS_ALL
-};
-
-static gboolean rb_ipod_prefs_keyfile_loaded (RBiPodPrefs *prefs);
-
 typedef struct {
 	GKeyFile *key_file;
 	gchar *group;
@@ -75,7 +65,7 @@ rb_ipod_prefs_dispose (GObject *object)
 	
 	g_free( priv->group );
 
-	g_free( priv->sync_entries );
+	g_strfreev( priv->sync_entries );
 	
 	G_OBJECT_CLASS (rb_ipod_prefs_parent_class)->dispose (object);
 }
@@ -123,7 +113,7 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	g_return_val_if_fail (source != NULL, NULL);
 	
 	// Load the key_file if it isn't already
-	priv->key_file = ( key_file != NULL ? key_file : rb_ipod_prefs_load_file() );
+	if (priv->key_file == NULL) priv->key_file = rb_ipod_prefs_load_file();
 	if (priv->key_file == NULL) {
 		g_free(prefs);
 		return NULL;
@@ -157,22 +147,23 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
      	return prefs;
 }
 
-static gpointer
-rb_ipod_prefs_get ( RBiPodPrefs *prefs, guint pref_id )
+gboolean
+rb_ipod_prefs_get ( RBiPodPrefs *prefs,
+		    guint pref_id )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
 	switch (pref_id) {
-		case SYNC_AUTO:		return &priv->sync_auto;
-		case SYNC_MUSIC:	return &priv->sync_music;
-		case SYNC_MUSIC_ALL:	return &priv->sync_music_all;
-		case SYNC_PODCASTS:	return &priv->sync_podcasts;
-		case SYNC_PODCASTS_ALL:	return &priv->sync_podcasts_all;
-		default:		return NULL;
+		case SYNC_AUTO:		return priv->sync_auto;
+		case SYNC_MUSIC:	return priv->sync_music;
+		case SYNC_MUSIC_ALL:	return priv->sync_music_all;
+		case SYNC_PODCASTS:	return priv->sync_podcasts;
+		case SYNC_PODCASTS_ALL:	return priv->sync_podcasts_all;
+		default:		return FALSE;
 	}
 }
 
-static gchar **
+gchar **
 rb_ipod_prefs_get_entries (RBiPodPrefs *prefs)
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
@@ -180,42 +171,43 @@ rb_ipod_prefs_get_entries (RBiPodPrefs *prefs)
 	return priv->sync_entries;
 }
 
-static void
-rb_ipod_prefs_set ( RBiPodPrefs *prefs, guint pref_id, gpointer value )
+void
+rb_ipod_prefs_set ( RBiPodPrefs *prefs,
+		    guint pref_id,
+		    gboolean value )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
 	switch (pref_id) {
-		case SYNC_AUTO:		priv->sync_auto = (gboolean) value;
-					g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", (gboolean) value);
+		case SYNC_AUTO:		priv->sync_auto = value;
+					g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", value);
 					break;
-		case SYNC_MUSIC:	priv->sync_music = (gboolean) value;
-					g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", (gboolean) value);
+		case SYNC_MUSIC:	priv->sync_music = value;
+					g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", value);
 					break;
-		case SYNC_MUSIC_ALL:	priv->sync_music_all = (gboolean) value;
-					g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", (gboolean) value);
+		case SYNC_MUSIC_ALL:	priv->sync_music_all = value;
+					g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", value);
 					break;
-		case SYNC_PODCASTS:	priv->sync_podcasts = (gboolean) value;
-					g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", (gboolean) value);
+		case SYNC_PODCASTS:	priv->sync_podcasts = value;
+					g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", value);
 					break;
-		case SYNC_PODCASTS_ALL:	priv->sync_podcasts_all = (gboolean) value;
-					g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", (gboolean) value);
+		case SYNC_PODCASTS_ALL:	priv->sync_podcasts_all = value;
+					g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", value);
 					break;
 		default:		break;
 	}
 }
 
-static void
-rb_ipod_prefs_set_entries (RBiPodPrefs *prefs, const gchar *entries[], gsize *length )
+void
+rb_ipod_prefs_set_entries (RBiPodPrefs *prefs,
+			   gchar ** entries,
+			   gsize length )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	if (priv->sync_entries != NULL) {
-		g_free(priv->sync_entries);
-		priv->sync_entries = NULL;
-	}
+	g_strfreev(priv->sync_entries);
 	
-	priv->sync_entries = g_strdup(entries);
-	g_key_file_set_string_list (priv->key_file, priv->group, "sync_entries", entries, &length );
+	priv->sync_entries = g_strdupv(entries);
+	g_key_file_set_string_list (priv->key_file, priv->group, "sync_entries", (const gchar * const *)priv->sync_entries, length );
 }
 

@@ -42,6 +42,14 @@ G_BEGIN_DECLS
 #define RB_IS_IPOD_PREFS_CLASS(k)  (G_TYPE_CHECK_CLASS_TYPE ((k), RB_TYPE_IPOD_PREFS))
 #define RB_IPOD_PREFS_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), RB_TYPE_IPOD_PREFS, RBiPodPrefsClass))
 
+enum {
+	SYNC_AUTO,
+	SYNC_MUSIC,
+	SYNC_MUSIC_ALL,
+	SYNC_PODCASTS,
+	SYNC_PODCASTS_ALL
+};
+
 typedef struct 
 {
 	GObject parent;
@@ -55,5 +63,15 @@ typedef struct
 
 RBiPodPrefs *rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source );
 GType rb_ipod_prefs_get_type (void);
+
+gboolean rb_ipod_prefs_get		( RBiPodPrefs *prefs,
+					  guint pref_id );
+gchar ** rb_ipod_prefs_get_entries	( RBiPodPrefs *prefs);
+void	 rb_ipod_prefs_set		( RBiPodPrefs *prefs,
+					  guint pref_id,
+					  gboolean value );
+void	 rb_ipod_prefs_set_entries	( RBiPodPrefs *prefs,
+					  gchar ** entries,
+					  gsize length );
 
 #endif

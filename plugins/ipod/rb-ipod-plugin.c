@@ -264,7 +264,7 @@ create_source_cb (RBRemovableMediaManager *rmm, GMount *mount, RBIpodPlugin *plu
 
 	src = RB_SOURCE (rb_ipod_source_new (RB_PLUGIN (plugin),
 					     plugin->shell,
-					     mount, &plugin->keyfile));
+					     mount, plugin->key_file));
 
 	plugin->ipod_sources = g_list_prepend (plugin->ipod_sources, src);
 	g_signal_connect_object (G_OBJECT (src),
