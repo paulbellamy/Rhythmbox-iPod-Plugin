@@ -51,9 +51,6 @@ G_DEFINE_TYPE (RBiPodPrefs, rb_ipod_prefs, G_TYPE_OBJECT)
 static void
 rb_ipod_prefs_init (RBiPodPrefs *prefs)
 {
-	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
-
-	priv->key_file = NULL;
 }
 
 static void
@@ -63,9 +60,12 @@ rb_ipod_prefs_dispose (GObject *object)
 	
 	priv->key_file = NULL;
 	
-	g_free( priv->group );
+	if (priv->group != NULL)
+		g_free( priv->group );
 
-	g_strfreev( priv->sync_entries );
+	if (priv->sync_entries != NULL)
+		g_strfreev( priv->sync_entries );
+	
 	
 	G_OBJECT_CLASS (rb_ipod_prefs_parent_class)->dispose (object);
 }
@@ -94,7 +94,7 @@ rb_ipod_prefs_load_file ()
 		rb_debug ("unable to load iPod data: %s", error->message);
 		g_error_free (error);
 		g_free(pathname);
-		return FALSE;
+		return NULL;
 	}
 	
 	g_free(pathname);
@@ -113,9 +113,10 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	g_return_val_if_fail (source != NULL, NULL);
 	
 	// Load the key_file if it isn't already
-	if (priv->key_file == NULL) priv->key_file = rb_ipod_prefs_load_file();
+	priv->key_file = (key_file == NULL ? rb_ipod_prefs_load_file() : key_file);
 	if (priv->key_file == NULL) {
-		g_free(prefs);
+		g_object_unref (G_OBJECT (prefs));
+		prefs = NULL;
 		return NULL;
 	}
 	
@@ -205,7 +206,8 @@ rb_ipod_prefs_set_entries (RBiPodPrefs *prefs,
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	g_strfreev(priv->sync_entries);
+	if (priv->sync_entries != NULL)
+		g_strfreev(priv->sync_entries);
 	
 	priv->sync_entries = g_strdupv(entries);
 	g_key_file_set_string_list (priv->key_file, priv->group, "sync_entries", (const gchar * const *)priv->sync_entries, length );

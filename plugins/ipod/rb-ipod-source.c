@@ -296,9 +296,10 @@ rb_ipod_source_new (RBPlugin *plugin,
 					       "mount", mount,
 					       "shell", shell,
 					       "source-group", RB_SOURCE_GROUP_DEVICES,
+					       "key_file", key_file,
 					       NULL));
-
-	rb_ipod_prefs_new ( key_file, source );
+	
+	(IPOD_SOURCE_GET_PRIVATE (source))->prefs = rb_ipod_prefs_new ( key_file, source );
 
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);
         g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
@@ -1678,6 +1679,7 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	char *capacity;
 	char *builder_file;
  	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+ 	
 	Itdb_Device *ipod_dev;
 	RBPlugin *plugin;
 
