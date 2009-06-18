@@ -195,12 +195,11 @@ rb_ipod_prefs_get ( RBiPodPrefs *prefs,
 	}
 }
 
-gchar **
+const gchar **
 rb_ipod_prefs_get_entries (RBiPodPrefs *prefs)
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
-	
-	return priv->sync_entries;
+	return (const gchar **) priv->sync_entries;
 }
 
 void

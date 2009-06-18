@@ -1786,9 +1786,8 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	
 	/* FIXME: Needs to set up the treeview here, also
 	 */
- 	gchar ** entries = NULL;
- 	entries = rb_ipod_prefs_get_entries (priv->prefs);
- 	g_strfreev(entries);
+	gchar ** entries = g_strdupv((gchar **)rb_ipod_prefs_get_entries (priv->prefs));
+	g_strfreev(entries);
 
 	label = gtk_builder_get_object (builder, "label-device-node-value");
 	text = rb_ipod_helpers_get_device (RB_SOURCE(source));
