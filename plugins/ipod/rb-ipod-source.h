@@ -65,6 +65,8 @@ GType                   rb_ipod_source_register_type    (GTypeModule *module);
 void			rb_ipod_source_new_playlist	(RBiPodSource *source);
 void			rb_ipod_source_remove_playlist	(RBiPodSource *ipod_source,
 							 RBSource *source);
+							 
+const gchar *		rb_ipod_source_get_name		(RBiPodSource *source);
 
 void			rb_ipod_source_show_properties	(RBiPodSource *source);
 

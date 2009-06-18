@@ -64,9 +64,11 @@ typedef struct
 RBiPodPrefs *rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source );
 GType rb_ipod_prefs_get_type (void);
 
+gboolean rb_ipod_prefs_save_file	( RBiPodPrefs *prefs,
+					  GError **error );
 gboolean rb_ipod_prefs_get		( RBiPodPrefs *prefs,
 					  guint pref_id );
-gchar ** rb_ipod_prefs_get_entries	( RBiPodPrefs *prefs);
+gchar ** rb_ipod_prefs_get_entries	( RBiPodPrefs *prefs );
 void	 rb_ipod_prefs_set		( RBiPodPrefs *prefs,
 					  guint pref_id,
 					  gboolean value );

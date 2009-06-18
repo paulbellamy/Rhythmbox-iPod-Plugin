@@ -1583,6 +1583,12 @@ rb_ipod_source_remove_playlist (RBiPodSource *ipod_source,
 	rb_ipod_db_remove_playlist (priv->ipod_db, rb_ipod_static_playlist_source_get_itdb_playlist (playlist_source));
 }
 
+const gchar *
+rb_ipod_source_get_name (RBiPodSource *source)
+{
+	return rb_ipod_db_get_ipod_name ((IPOD_SOURCE_GET_PRIVATE (source))->ipod_db);
+}
+
 static void
 rb_ipod_info_response_cb (GtkDialog *dialog,
  			  int response_id,
