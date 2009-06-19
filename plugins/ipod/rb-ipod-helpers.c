@@ -550,9 +550,6 @@ volume_get_serial (GVolume *volume)
 
 	ctx = libhal_ctx_new ();
 	if (ctx == NULL) {
-		/* FIXME: should we return an error somehow so that we can
-		 * fall back to a check for iTunesDB presence instead ?
-		 */
 		rb_debug ("cannot connect to HAL");
 		goto end;
 	}
@@ -574,7 +571,7 @@ volume_get_serial (GVolume *volume)
 	if (parent_udi == NULL || dbus_error_is_set (&error))
 		goto end;
 	result = libhal_device_get_property_string (ctx, parent_udi,
-						    "usb_device.serial", &error);
+						    "storage.serial", &error);
 
 end:
 	g_free (parent_udi);

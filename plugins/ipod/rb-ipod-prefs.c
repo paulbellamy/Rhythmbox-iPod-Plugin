@@ -152,9 +152,9 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	}
 	
 	g_object_get (source, "mount", &mount, NULL);
-	if (rb_ipod_helpers_get_serial ( mount ) != NULL) {
-		priv->group = rb_ipod_helpers_get_serial ( mount );
-	} else {
+	priv->group = rb_ipod_helpers_get_serial ( mount );
+	if (priv->group == NULL) {
+		// Couldn't get the serial, use the ipod name
 		priv->group = g_strdup(rb_ipod_source_get_name (source));
 	}
 	
