@@ -1656,7 +1656,7 @@ rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 			   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
 }
 
-/* FIXME: Unused! not hooked up to treeview yet. pending UI design
+/* FIXME: Unused! not hooked up to treeview yet. pending UI redesign
  *
 static void
 rb_ipod_sync_entries_changed_cb (GtkTreeView *treeview,
@@ -1823,54 +1823,50 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	GHashTable *ipod_sync_hash =	g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
 	GList	*to_add = NULL; // Files to go onto the iPod
 	GList	*to_remove = NULL; // Files to be removed from the iPod
-	//gchar	*iter = NULL; // unused for now
+	const gchar **iter = NULL; // Used for populating the itinerary_sync_hash
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
+	
+	// Get the library DB
+	RBShell *shell;
+	RhythmDB *library_db;
+	g_object_get (ipod_source, "shell", &shell, NULL);
+	g_object_get (shell, "db", &library_db, NULL);
+	g_object_unref (shell);
 	
 	// Fill our hash tables
 	// priv->entry_map is a hash_table of the ipod.  We just need to build one of the itinerary.
 	// g_hash_table_lookup (hash_table, RhythmDBEntry *entry); // to check if "entry" is in "hash_table"
 	
 	// duplicate priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_insert_value, ipod_sync_hash );
+	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_insert, ipod_sync_hash );
 	
-	rb_ipod_helpers_hash_table_insert_value ( 0, 0, itinerary_sync_hash);
-	
-	/* FIXME: the below is broken
-	 */
-	/*
-	for ( iter = rb_ipod_prefs_get_entries(priv->prefs->sync_entries);
-	      iter != NULL;
+	// populate the itinerary_sync_hash, with the selected playlists
+	for ( iter = (const gchar **) rb_ipod_prefs_get_entries( priv->prefs );
+	      *iter != NULL;
 	      iter++ )
 	{
-		rb_ipod_helpers_hash_table_insert_value ( 0, 0, itinerary_sync_hash );
-	}
-	*/
-	
-	// fill the itinerary_hash from GKeyFile
-	if ( rb_ipod_prefs_get (priv->prefs, SYNC_MUSIC) ) {
-		// g_hash_table_insert (itinerary_hash, g_strdup (key), g_strdup (value) );
-	} else {
-		
-	}
-	
-	if ( rb_ipod_prefs_get (priv->prefs, SYNC_PODCASTS) ) {
-		
-	} else {
-		
+		// get playlist with ( g_strcmp(name, iter) == 0 )
+		// For each item in this playlist {
+			// rb_ipod_helpers_hash_table_insert ( key, value, itinerary_sync_hash );
+		// }
 	}
 	
 	// Build the list of stuff to remove! (on ipod, but not in itinerary)
+	/* FIXME: This will append everything! Doesn't check between the lists.
+	 */
 	//g_hash_table_foreach (priv->entry_map,
-	//			GHFunc func, // function to add to remove list if necessary
-	//			gpointer user_data);
+	//			rb_ipod_helpers_list_append, // function to add to remove list if necessary
+	//			(gpointer) to_remove );
 	
 	
 	// Build the list of stuff to add! (in itinerary, but not on ipod)
+	/* FIXME: This will append everything! Doesn't check between the lists.
+	 */
 	//g_hash_table_foreach (itinerary_hash,
-	//			GHFunc func, // function to add to add list if necessary
-	//			gpointer user_data);
+	//			rb_ipod_helpers_list_append, // function to add to add list if necessary
+	//			(gpointer) to_add );
 	
 	// Empty the hash tables
 	g_hash_table_remove_all (itinerary_sync_hash);
@@ -1907,7 +1903,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	*/
 	
 	// Done with this list, clear it.
-	g_list_free( to_remove );
+	g_list_free ( to_remove );
 	
 	// Transfer needed tracks and podcasts from itinerary to iPod
 	/* FIXME:
@@ -1923,6 +1919,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	*/
 	
 	// Done with this list, clear it.
-	g_list_free( to_add );
+	g_list_free ( to_add );
+	
+	g_object_unref ( library_db );
 }
 
