@@ -669,7 +669,7 @@ rb_ipod_helpers_hash_table_insert ( gpointer key,
 				    gpointer value,
 				    gpointer hash_table )
 {
-	g_hash_table_insert ( hash_table, key, value );
+	g_hash_table_insert ( hash_table, key, key );
 }
 
 void

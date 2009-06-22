@@ -51,6 +51,8 @@
 #include "rhythmdb.h"
 #include "rb-cut-and-paste-code.h"
 #include "rb-ipod-prefs.h"
+#include "rb-playlist-source.h"
+#include "rb-playlist-manager.h"
 
 #define CONF_STATE_PANED_POSITION CONF_PREFIX "/state/ipod/paned_position"
 #define CONF_STATE_SHOW_BROWSER   CONF_PREFIX "/state/ipod/show_browser"
@@ -1813,6 +1815,21 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	g_object_unref (builder);
 }
 
+static void
+rb_ipod_helpers_tree_view_insert (GtkTreeModel *query_model,
+				  GtkTreePath *path,
+				  GtkTreeIter *iter,
+				  GHashTable *user_data)
+{
+	RhythmDBEntry *entry;
+	
+	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
+	
+	g_hash_table_insert(user_data, entry, entry );
+	
+	return;
+}
+
 void
 rb_ipod_source_sync (RBiPodSource *ipod_source)
 {
@@ -1824,39 +1841,76 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	GList	*to_add = NULL; // Files to go onto the iPod
 	GList	*to_remove = NULL; // Files to be removed from the iPod
 	const gchar **iter = NULL; // Used for populating the itinerary_sync_hash
+	//gchar **playlists = NULL;
+	GList *playlists = NULL;
+	//const gchar **playlist_iter = NULL;
+	GList *playlist_iter = NULL;
+	const gchar *name = NULL;
+	RhythmDBEntryType entry_type;
+	GtkTreeModel *query_model;
+	//RBPlaylistSourcePrivate *pl_priv = NULL;
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
+	RBiPodSourcePrivate *ipod_priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
 	
 	// Get the library DB
 	RBShell *shell;
 	RhythmDB *library_db;
 	g_object_get (ipod_source, "shell", &shell, NULL);
 	g_object_get (shell, "db", &library_db, NULL);
-	g_object_unref (shell);
 	
 	// Fill our hash tables
-	// priv->entry_map is a hash_table of the ipod.  We just need to build one of the itinerary.
+	// ipod_priv->entry_map is a hash_table of the ipod.  We just need to build one of the itinerary.
 	// g_hash_table_lookup (hash_table, RhythmDBEntry *entry); // to check if "entry" is in "hash_table"
 	
-	// duplicate priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( priv->entry_map, rb_ipod_helpers_hash_table_insert, ipod_sync_hash );
-	
 	// populate the itinerary_sync_hash, with the selected playlists
-	for ( iter = (const gchar **) rb_ipod_prefs_get_entries( priv->prefs );
+	//rb_playlist_manager_get_playlist_names ((RBPlaylistManager *) rb_shell_get_playlist_manager (shell),
+	//					&playlists,
+	//					NULL);
+	playlists = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
+	for ( iter = (const gchar **) rb_ipod_prefs_get_entries( ipod_priv->prefs );
 	      *iter != NULL;
 	      iter++ )
 	{
 		// get playlist with ( g_strcmp(name, iter) == 0 )
-		// For each item in this playlist {
-			// rb_ipod_helpers_hash_table_insert ( key, value, itinerary_sync_hash );
-		// }
+		for (playlist_iter = playlists;  playlist_iter != NULL; playlist_iter++ ) {
+			g_object_get ((RBSource *)playlist_iter, "name", &name, NULL);
+			if ( strcmp( (const gchar *)name, (const gchar *)iter ) == 0 ) {
+				// Get it's entries, and add them to the itinerary_sync_hash
+				g_object_get (G_OBJECT (playlist_iter), "entry-type", &entry_type, NULL);
+	
+				query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty (library_db));
+	
+				rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
+						        RHYTHMDB_QUERY_PROP_EQUALS,
+						        RHYTHMDB_PROP_TYPE, entry_type,
+							RHYTHMDB_QUERY_END);
+				
+//				gtk_tree_model_foreach (query_model,
+//							(GtkTreeModelForeachFunc) rb_add_artwork_whole_album_cb,
+//							&itinerary_sync_hash);
+				gtk_tree_model_foreach (query_model,
+							(GtkTreeModelForeachFunc) rb_ipod_helpers_tree_view_insert,
+							&itinerary_sync_hash);
+				
+				g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
+				g_object_unref(query_model);
+				
+//				g_hash_table_foreach ( query_model->entries, rb_ipod_helpers_hash_table_insert, &itinerary_sync_hash );
+				break;
+			}
+		}
 	}
+	
+	//g_strfreev (playlists);
+	
+	// duplicate ipod_priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
+	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_helpers_hash_table_insert, &ipod_sync_hash );
 	
 	// Build the list of stuff to remove! (on ipod, but not in itinerary)
 	/* FIXME: This will append everything! Doesn't check between the lists.
 	 */
-	//g_hash_table_foreach (priv->entry_map,
+	//g_hash_table_foreach (ipod_priv->entry_map,
 	//			rb_ipod_helpers_list_append, // function to add to remove list if necessary
 	//			(gpointer) to_remove );
 	
@@ -1873,19 +1927,19 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	g_hash_table_remove_all (ipod_sync_hash);
 	
 	// Calculate How much Music needs transferring
-	if (rb_ipod_prefs_get (priv->prefs, SYNC_MUSIC)) {
+	if (rb_ipod_prefs_get (ipod_priv->prefs, SYNC_MUSIC)) {
 		// How big is all the music in the to_add list?
 		// FIXME: This seem inefficient
 	}
 	
 	// Calculate How much Podcasts need transferring
-	if (rb_ipod_prefs_get (priv->prefs, SYNC_PODCASTS)) {
+	if (rb_ipod_prefs_get (ipod_priv->prefs, SYNC_PODCASTS)) {
 		// How big are all the podcasts in the to_add list?
 		// FIXME: This needs to be similar to the above, but for podcasts
 	}
 	
 	// Check we have enough space, on the iPod.
-	if ((space_needed_music + space_needed_podcasts) > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db))) {
+	if ((space_needed_music + space_needed_podcasts) > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (ipod_priv->ipod_db))) {
 		//Not enough Space on Device throw up an error
 	}
 	
@@ -1897,7 +1951,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		if ( (impl_get_sync_music(ipod_source) && itdb_track.isMusic())
 			|| (impl_get_sync_podcasts(ipod_source) && itdb_track.is_Podcast()) ) {
 			itdb_track = to_remove.getNext();
-			rb_ipod_db_track_remove (priv->ipod_db, itdb_track);
+			rb_ipod_db_track_remove (ipod_priv->ipod_db, itdb_track);
 		}
 	}
 	*/
@@ -1913,7 +1967,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		if ( (impl_get_sync_music(ipod_source) && lib_track.isMusic())
 			|| (impl_get_sync_podcasts(ipod_source) && lib_track.is_Podcast()) ) {
 			lib_track = to_add.getNext();
-			rb_ipod_db_track_add (priv->ipod_db, lib_track);
+			rb_ipod_db_track_add (ipod_priv->ipod_db, lib_track);
 		}
 	}
 	*/
@@ -1922,5 +1976,6 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	g_list_free ( to_add );
 	
 	g_object_unref ( library_db );
+	g_object_unref (shell);
 }
 
