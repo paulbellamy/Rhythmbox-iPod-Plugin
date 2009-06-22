@@ -226,6 +226,11 @@ rb_audiocd_source_constructor (GType type,
 	/* hide the 'album' column */
 	gtk_tree_view_column_set_visible (rb_entry_view_get_column (entry_view, RB_ENTRY_VIEW_COL_ALBUM), FALSE);
 
+	/* enable in-place editing for titles, artists, and genres */
+	rb_entry_view_set_column_editable (entry_view, RB_ENTRY_VIEW_COL_TITLE, TRUE);
+	rb_entry_view_set_column_editable (entry_view, RB_ENTRY_VIEW_COL_ARTIST, TRUE);
+	rb_entry_view_set_column_editable (entry_view, RB_ENTRY_VIEW_COL_GENRE, TRUE);
+
 	/* handle extra metadata requests for album artist and album artist sortname */
 	db = get_db_for_source (source);
 	g_signal_connect_object (G_OBJECT (db), "entry-extra-metadata-request::" RHYTHMDB_PROP_ALBUM_ARTIST,
@@ -857,6 +862,12 @@ rb_audiocd_load_songs (RBAudioCdSource *source)
 	priv->fakesink = gst_element_factory_make ("fakesink", "fakesink");
 	gst_bin_add_many (GST_BIN (priv->pipeline), priv->cdda, priv->fakesink, NULL);
 	gst_element_link (priv->cdda, priv->fakesink);
+
+	/* disable paranoia (if using cdparanoia) since we're only reading track information here.
+	 * this reduces cdparanoia's cache size, so the process is much faster.
+	 */
+	if (g_object_class_find_property (G_OBJECT_GET_CLASS (source), "paranoia-mode"))
+		g_object_set (source, "paranoia-mode", 0, NULL);
 
 	if (rb_audiocd_scan_songs (source, db))
 		rb_audiocd_load_metadata (source, db);
