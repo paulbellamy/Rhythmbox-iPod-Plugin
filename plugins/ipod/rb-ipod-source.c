@@ -1825,7 +1825,9 @@ rb_ipod_helpers_tree_view_insert (GtkTreeModel *query_model,
 	
 	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
 	
+	g_print("Mark.\n");
 	g_hash_table_insert(user_data, entry, entry );
+	g_print("Inserted.\n");
 	
 	return;
 }
@@ -1840,15 +1842,12 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	GHashTable *ipod_sync_hash =	g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
 	GList	*to_add = NULL; // Files to go onto the iPod
 	GList	*to_remove = NULL; // Files to be removed from the iPod
-	const gchar **iter = NULL; // Used for populating the itinerary_sync_hash
-	//gchar **playlists = NULL;
+	const gchar **iter; // Used for populating the itinerary_sync_hash
 	GList *playlists = NULL;
-	//const gchar **playlist_iter = NULL;
 	GList *playlist_iter = NULL;
-	const gchar *name = NULL;
+	gchar *name;
 	RhythmDBEntryType entry_type;
 	GtkTreeModel *query_model;
-	//RBPlaylistSourcePrivate *pl_priv = NULL;
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
 	RBiPodSourcePrivate *ipod_priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
@@ -1856,7 +1855,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	// Get the library DB
 	RBShell *shell;
 	RhythmDB *library_db;
-	g_object_get (ipod_source, "shell", &shell, NULL);
+	g_object_get (G_OBJECT (ipod_source), "shell", &shell, NULL);
 	g_object_get (shell, "db", &library_db, NULL);
 	
 	// Fill our hash tables
@@ -1873,11 +1872,12 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	      iter++ )
 	{
 		// get playlist with ( g_strcmp(name, iter) == 0 )
-		for (playlist_iter = playlists;  playlist_iter != NULL; playlist_iter++ ) {
-			g_object_get ((RBSource *)playlist_iter, "name", &name, NULL);
-			if ( strcmp( (const gchar *)name, (const gchar *)iter ) == 0 ) {
+		for (playlist_iter = playlists;  playlist_iter; playlist_iter = playlist_iter->next ) {
+			g_object_get (G_OBJECT (playlist_iter->data), "name", &name, NULL); // This gripes about something being uninstantiable
+			if ( strcmp( name, *iter ) == 0 ) {
+	g_print("Found Playlist: %s\n", name);
 				// Get it's entries, and add them to the itinerary_sync_hash
-				g_object_get (G_OBJECT (playlist_iter), "entry-type", &entry_type, NULL);
+				g_object_get (G_OBJECT (playlist_iter->data), "entry-type", &entry_type, NULL);
 	
 				query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty (library_db));
 	
@@ -1889,6 +1889,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 //				gtk_tree_model_foreach (query_model,
 //							(GtkTreeModelForeachFunc) rb_add_artwork_whole_album_cb,
 //							&itinerary_sync_hash);
+				
 				gtk_tree_model_foreach (query_model,
 							(GtkTreeModelForeachFunc) rb_ipod_helpers_tree_view_insert,
 							&itinerary_sync_hash);
@@ -1902,10 +1903,13 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		}
 	}
 	
-	//g_strfreev (playlists);
+	g_print("Populated itinerary_sync_hash.\n");
 	
 	// duplicate ipod_priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
 	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_helpers_hash_table_insert, &ipod_sync_hash );
+	
+	g_print("Populated ipod_sync_hash.\n");
+	return;
 	
 	// Build the list of stuff to remove! (on ipod, but not in itinerary)
 	/* FIXME: This will append everything! Doesn't check between the lists.
@@ -1923,8 +1927,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	//			(gpointer) to_add );
 	
 	// Empty the hash tables
-	g_hash_table_remove_all (itinerary_sync_hash);
-	g_hash_table_remove_all (ipod_sync_hash);
+	g_hash_table_unref (itinerary_sync_hash);
+	g_hash_table_unref (ipod_sync_hash);
 	
 	// Calculate How much Music needs transferring
 	if (rb_ipod_prefs_get (ipod_priv->prefs, SYNC_MUSIC)) {
