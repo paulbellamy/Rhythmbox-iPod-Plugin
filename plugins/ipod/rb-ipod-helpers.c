@@ -638,7 +638,7 @@ rb_ipod_helpers_track_hash  (gconstpointer v)
 	GString *str = g_string_new ( rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_TITLE) );
 	
 	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ARTIST));
-	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_DURATION));
+	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_GENRE));
 	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ALBUM));
 	
 	/* FIXME: The below might be needed for hashing podcasts properly,
@@ -662,5 +662,21 @@ rb_ipod_helpers_track_equal (gconstpointer v1,
 {
 	/* This function is for telling if two tracks are identical. */
 	return (rb_ipod_helpers_track_hash (v1) == rb_ipod_helpers_track_hash (v2));
+
+
+//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE)) == 0)
+//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ARTIST), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ARTIST)) == 0)
+//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_GENRE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_GENRE)) == 0)
+//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ALBUM), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ALBUM)) == 0)
+//	{
+//		g_print("%10s - %10s == %10s - %10s\n",
+//			rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE),
+//			rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ARTIST),
+//			rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE),
+//			rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ARTIST));
+//		return TRUE;
+//	}
+//	
+//	return FALSE;	
 }
 

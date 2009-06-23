@@ -1816,41 +1816,47 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 
 typedef struct {
 	GHashTable *other_hash_table;
-	GList *list;
+	GList **list;
 } HashTableComparisonData;
 
 static void
-rb_ipod_source_hash_table_compare (gpointer key,
-				   gpointer value,
-				   gpointer data)
+rb_ipod_source_hash_table_compare (gpointer key,	// RhythmDBEntry *
+				   gpointer value,	// Whatever
+				   gpointer user_data)	// HashTableComparisonData *
 {
-	if ( !g_hash_table_lookup (((HashTableComparisonData *)data)->other_hash_table, key) ) {
-		((HashTableComparisonData *)data)->list = g_list_append ( ((HashTableComparisonData *)data)->list, (RhythmDBEntry *) key );
+	HashTableComparisonData *data = user_data;
+	
+	if ( !g_hash_table_lookup (data->other_hash_table, key) ) {
+		*(data->list) = g_list_append ( *(data->list), key );
+		
+//		if (*(data->list)) {
+//			g_print("Appended:\t%10s - %10s\n",
+//				rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
+//				rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE) );
+//		}
+//	} else {
+//		g_print("Not Appended:\t%10s - %10s\n",
+//			rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
+//			rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE) );
 	}
 }
 
 static void
 rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 				   gpointer value,	// Whatever
-				   gpointer user_data ) // GHashTable**
+				   gpointer user_data ) // GHashTable **
 {
-	
-	//const gchar *uri = g_strdup ( rhythmdb_entry_get_string (entry, (RhythmDBPropType) RHYTHMDB_PROP_LOCATION) );
-	gchar *uri = g_strdup ( rhythmdb_entry_get_playback_uri (key) );
-	// BELOW IS FOR DEBUGGING
-	if (uri) {
-		//g_print("uri = %s\n", uri);
-	}
-	
-// FIXME: This errors out! What?!??! complains about rhythmdb_entry_get_string()
-//	g_hash_table_insert ( *((GHashTable **) user_data),
-//			      (RhythmDBEntry *) key,
-//			      g_strdup ( uri ) );
-
+//	g_print("Inserting:\t%10s - %10s => %10s\n",
+//		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
+//		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
+//		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) );
+	g_hash_table_insert ( *((GHashTable **) user_data),
+			      key,
+			      g_strdup ( rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) ) );
 }
 
-static void
-rb_ipod_helpers_tree_view_insert (GtkTreeModel *query_model,
+static gboolean
+rb_ipod_source_tree_view_insert (GtkTreeModel *query_model,
 				  GtkTreePath  *path,
 				  GtkTreeIter  *iter,
 				  GHashTable   **hash_table)
@@ -1859,7 +1865,9 @@ rb_ipod_helpers_tree_view_insert (GtkTreeModel *query_model,
 	
 	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
 	
-	rb_ipod_source_hash_table_insert (entry, entry, hash_table);
+	rb_ipod_source_hash_table_insert (entry, NULL, hash_table);
+	
+	return FALSE;
 }
 
 void
@@ -1915,14 +1923,14 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 				/* FIXME: Query NOT done!
 				 */
 				rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
-							RHYTHMDB_QUERY_PROP_EQUALS,		// Testing
-							RHYTHMDB_PROP_ARTIST, "Balmorhea",	// Testing
+							RHYTHMDB_QUERY_PROP_EQUALS,		// DEBUGGING
+							RHYTHMDB_PROP_ARTIST, "Balmorhea",	// DEBUGGING
 						        RHYTHMDB_QUERY_PROP_EQUALS,
 						        RHYTHMDB_PROP_TYPE, entry_type,
 							RHYTHMDB_QUERY_END);
 				
 				gtk_tree_model_foreach (query_model,
-							(GtkTreeModelForeachFunc) rb_ipod_helpers_tree_view_insert,
+							(GtkTreeModelForeachFunc) rb_ipod_source_tree_view_insert,
 							&itinerary_sync_hash);
 				
 				g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
@@ -1933,19 +1941,17 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 		}
 	}
 	
-	g_print("Populated itinerary_sync_hash.\n");
-	
 	// duplicate ipod_priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_source_hash_table_insert, &ipod_sync_hash );
-	
-	g_print("Populated ipod_sync_hash.\n");
+	g_hash_table_foreach ( ipod_priv->entry_map,
+			       rb_ipod_source_hash_table_insert,
+			       &ipod_sync_hash );
 	
 	// Build the list of stuff to remove! (on ipod, but not in itinerary)
 	/* FIXME: This will append everything! Doesn't check between the lists.
 	 */
-	 
+	
 	comparison_data.other_hash_table = itinerary_sync_hash;
-	comparison_data.list = to_remove;
+	comparison_data.list = &to_remove;
 	g_hash_table_foreach (ipod_sync_hash,
 			      rb_ipod_source_hash_table_compare, // function to add to remove list if necessary
 			      &comparison_data );
@@ -1955,7 +1961,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	/* FIXME: This will append everything! Doesn't check between the lists.
 	 */
 	comparison_data.other_hash_table = ipod_sync_hash;
-	comparison_data.list = to_add;
+	comparison_data.list = &to_add;
 	g_hash_table_foreach (itinerary_sync_hash,
 			      rb_ipod_source_hash_table_compare, // function to add to add list if necessary
 			      &comparison_data );
@@ -1967,37 +1973,41 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	// Calculate How much Music and Podcasts needs transferring
 	// FIXME: This seem inefficient
 	g_print("To Add:\n"); // DEBUGGING
-	for (list_iter = to_add; list_iter; list_iter++) {
+	for (list_iter = to_add; list_iter; list_iter = list_iter->next) {
 		// DEBUGGING
-		g_print("%10s, %10s, %10s\n", rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_TITLE),
-					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ARTIST),
-					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ALBUM) );
+		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE),
+					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
+					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM) );
 		/*
 		switch ( entry type ) {
 			case MUSIC:
-				space_needed_music += rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				space_needed_music += rhythmdb_entry_get_uint64 ( list_iter->data,
+										  RHYTHMDB_PROP_FILE_SIZE );
 				break;
 			case PODCAST:
-				space_needed_podcast += rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				space_needed_podcast += rhythmdb_entry_get_uint64 ( list_iter->data,
+										    RHYTHMDB_PROP_FILE_SIZE );
 				break;
 			default:
 				break;
 		}
 		*/
 	}
-	g_print("To Remove:\n"); // DEBUGGING
-	for (list_iter = to_remove; list_iter; list_iter++) {
+//	g_print("To Remove:\n"); // DEBUGGING
+	for (list_iter = to_remove; list_iter; list_iter = list_iter->next) {
 		// DEBUGGING
-		g_print("%10s, %10s, %10s\n", rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_TITLE),
-					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ARTIST),
-					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ALBUM) );
+//		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE),
+//					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
+//					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM) );
 		/*
 		switch ( entry type ) {
 			case MUSIC:
-				space_needed_music -= rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				space_needed_music -= rhythmdb_entry_get_uint64 ( list_iter->data,
+										  RHYTHMDB_PROP_FILE_SIZE );
 				break;
 			case PODCAST:
-				space_needed_podcast -= rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				space_needed_podcast -= rhythmdb_entry_get_uint64 ( list_iter->data,
+										    RHYTHMDB_PROP_FILE_SIZE );
 				break;
 			default:
 				break;
