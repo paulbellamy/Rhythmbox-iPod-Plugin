@@ -664,19 +664,3 @@ rb_ipod_helpers_track_equal (gconstpointer v1,
 	return (rb_ipod_helpers_track_hash (v1) == rb_ipod_helpers_track_hash (v2));
 }
 
-void
-rb_ipod_helpers_hash_table_insert ( gpointer key,
-				    gpointer value,
-				    gpointer hash_table )
-{
-	g_hash_table_insert ( hash_table, (RhythmDBEntry *) key, g_strdup(rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION)) );
-}
-
-void
-rb_ipod_helpers_list_append (gpointer key,
-			     gpointer value,
-			     gpointer list)
-{
-	list = g_list_append ( list, (RhythmDBEntry *) key );
-}
-

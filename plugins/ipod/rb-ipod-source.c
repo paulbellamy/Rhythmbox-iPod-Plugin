@@ -1814,6 +1814,41 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	g_object_unref (builder);
 }
 
+typedef struct {
+	GHashTable *other_hash_table;
+	GList *list;
+} HashTableComparisonData;
+
+static void
+rb_ipod_source_hash_table_compare (gpointer key,
+				   gpointer value,
+				   gpointer data)
+{
+	if ( !g_hash_table_lookup (((HashTableComparisonData *)data)->other_hash_table, key) ) {
+		((HashTableComparisonData *)data)->list = g_list_append ( ((HashTableComparisonData *)data)->list, (RhythmDBEntry *) key );
+	}
+}
+
+static void
+rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
+				   gpointer value,	// Whatever
+				   gpointer user_data ) // GHashTable**
+{
+	
+	//const gchar *uri = g_strdup ( rhythmdb_entry_get_string (entry, (RhythmDBPropType) RHYTHMDB_PROP_LOCATION) );
+	gchar *uri = g_strdup ( rhythmdb_entry_get_playback_uri (key) );
+	// BELOW IS FOR DEBUGGING
+	if (uri) {
+		//g_print("uri = %s\n", uri);
+	}
+	
+// FIXME: This errors out! What?!??! complains about rhythmdb_entry_get_string()
+//	g_hash_table_insert ( *((GHashTable **) user_data),
+//			      (RhythmDBEntry *) key,
+//			      g_strdup ( uri ) );
+
+}
+
 static void
 rb_ipod_helpers_tree_view_insert (GtkTreeModel *query_model,
 				  GtkTreePath  *path,
@@ -1824,18 +1859,7 @@ rb_ipod_helpers_tree_view_insert (GtkTreeModel *query_model,
 	
 	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
 	
-	g_print("Mark.\n");
-	const gchar *uri = rhythmdb_entry_get_string (entry, (RhythmDBPropType) RHYTHMDB_PROP_LOCATION);
-	if (uri) {
-		g_print("uri = %s\n", uri);
-	}
-	g_hash_table_insert ( *hash_table,
-			      entry,
-			      g_strdup ( uri ) );
-	g_print("Inserted.\n");
-	
-	
-	return;
+	rb_ipod_source_hash_table_insert (entry, entry, hash_table);
 }
 
 void
@@ -1850,13 +1874,14 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	GList	*to_remove = NULL; // Files to be removed from the iPod
 	const gchar **iter; // Used for populating the itinerary_sync_hash
 	GList *playlists = NULL;
-	GList *playlist_iter = NULL;
+	GList *list_iter = NULL;
 	gchar *name;
 	RhythmDBEntryType entry_type;
 	GtkTreeModel *query_model;
 	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in MBs
 	RBiPodSourcePrivate *ipod_priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
+	HashTableComparisonData comparison_data;
 	
 	// Get the library DB
 	RBShell *shell;
@@ -1878,23 +1903,23 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	      iter++ )
 	{
 		// get playlist with ( g_strcmp(name, iter) == 0 )
-		for (playlist_iter = playlists;  playlist_iter; playlist_iter = playlist_iter->next ) {
-			g_object_get (G_OBJECT (playlist_iter->data), "name", &name, NULL); // This gripes about something being uninstantiable
+		for (list_iter = playlists;  list_iter; list_iter = list_iter->next ) {
+			g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL); // This gripes about something being uninstantiable
 			if ( strcmp( name, *iter ) == 0 ) {
 	g_print("Found Playlist: %s\n", name);
 				// Get it's entries, and add them to the itinerary_sync_hash
-				g_object_get (G_OBJECT (playlist_iter->data), "entry-type", &entry_type, NULL);
+				g_object_get (G_OBJECT (list_iter->data), "entry-type", &entry_type, NULL);
 	
 				query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty (library_db));
-	
+				
+				/* FIXME: Query NOT done!
+				 */
 				rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
+							RHYTHMDB_QUERY_PROP_EQUALS,		// Testing
+							RHYTHMDB_PROP_ARTIST, "Balmorhea",	// Testing
 						        RHYTHMDB_QUERY_PROP_EQUALS,
 						        RHYTHMDB_PROP_TYPE, entry_type,
 							RHYTHMDB_QUERY_END);
-				
-//				gtk_tree_model_foreach (query_model,
-//							(GtkTreeModelForeachFunc) rb_add_artwork_whole_album_cb,
-//							&itinerary_sync_hash);
 				
 				gtk_tree_model_foreach (query_model,
 							(GtkTreeModelForeachFunc) rb_ipod_helpers_tree_view_insert,
@@ -1902,8 +1927,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 				
 				g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
 				g_object_unref(query_model);
-				
-//				g_hash_table_foreach ( query_model->entries, rb_ipod_helpers_hash_table_insert, &itinerary_sync_hash );
+			
 				break;
 			}
 		}
@@ -1912,42 +1936,75 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	g_print("Populated itinerary_sync_hash.\n");
 	
 	// duplicate ipod_priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_helpers_hash_table_insert, &ipod_sync_hash );
+	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_source_hash_table_insert, &ipod_sync_hash );
 	
 	g_print("Populated ipod_sync_hash.\n");
-	return;
 	
 	// Build the list of stuff to remove! (on ipod, but not in itinerary)
 	/* FIXME: This will append everything! Doesn't check between the lists.
 	 */
-	//g_hash_table_foreach (ipod_priv->entry_map,
-	//			rb_ipod_helpers_list_append, // function to add to remove list if necessary
-	//			(gpointer) to_remove );
+	 
+	comparison_data.other_hash_table = itinerary_sync_hash;
+	comparison_data.list = to_remove;
+	g_hash_table_foreach (ipod_sync_hash,
+			      rb_ipod_source_hash_table_compare, // function to add to remove list if necessary
+			      &comparison_data );
 	
 	
 	// Build the list of stuff to add! (in itinerary, but not on ipod)
 	/* FIXME: This will append everything! Doesn't check between the lists.
 	 */
-	//g_hash_table_foreach (itinerary_hash,
-	//			rb_ipod_helpers_list_append, // function to add to add list if necessary
-	//			(gpointer) to_add );
+	comparison_data.other_hash_table = ipod_sync_hash;
+	comparison_data.list = to_add;
+	g_hash_table_foreach (itinerary_sync_hash,
+			      rb_ipod_source_hash_table_compare, // function to add to add list if necessary
+			      &comparison_data );
 	
 	// Empty the hash tables
 	g_hash_table_unref (itinerary_sync_hash);
 	g_hash_table_unref (ipod_sync_hash);
 	
-	// Calculate How much Music needs transferring
-	if (rb_ipod_prefs_get (ipod_priv->prefs, SYNC_MUSIC)) {
-		// How big is all the music in the to_add list?
-		// FIXME: This seem inefficient
+	// Calculate How much Music and Podcasts needs transferring
+	// FIXME: This seem inefficient
+	g_print("To Add:\n"); // DEBUGGING
+	for (list_iter = to_add; list_iter; list_iter++) {
+		// DEBUGGING
+		g_print("%10s, %10s, %10s\n", rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_TITLE),
+					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ARTIST),
+					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ALBUM) );
+		/*
+		switch ( entry type ) {
+			case MUSIC:
+				space_needed_music += rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				break;
+			case PODCAST:
+				space_needed_podcast += rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				break;
+			default:
+				break;
+		}
+		*/
 	}
-	
-	// Calculate How much Podcasts need transferring
-	if (rb_ipod_prefs_get (ipod_priv->prefs, SYNC_PODCASTS)) {
-		// How big are all the podcasts in the to_add list?
-		// FIXME: This needs to be similar to the above, but for podcasts
+	g_print("To Remove:\n"); // DEBUGGING
+	for (list_iter = to_remove; list_iter; list_iter++) {
+		// DEBUGGING
+		g_print("%10s, %10s, %10s\n", rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_TITLE),
+					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ARTIST),
+					      rhythmdb_entry_get_string((RhythmDBEntry *)list_iter, RHYTHMDB_PROP_ALBUM) );
+		/*
+		switch ( entry type ) {
+			case MUSIC:
+				space_needed_music -= rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				break;
+			case PODCAST:
+				space_needed_podcast -= rhythmdb_entry_get_uint64 ( (RhythmDBEntry *)list_iter, RHYTHMDB_PROP_FILE_SIZE );
+				break;
+			default:
+				break;
+		}
+		*/
 	}
-	
+		
 	// Check we have enough space, on the iPod.
 	if ((space_needed_music + space_needed_podcasts) > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (ipod_priv->ipod_db))) {
 		//Not enough Space on Device throw up an error
