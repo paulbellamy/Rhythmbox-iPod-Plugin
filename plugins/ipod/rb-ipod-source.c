@@ -1818,14 +1818,20 @@ static void
 rb_ipod_helpers_tree_view_insert (GtkTreeModel *query_model,
 				  GtkTreePath  *path,
 				  GtkTreeIter  *iter,
-				  GHashTable   *hash_table)
+				  GHashTable   **hash_table)
 {
 	RhythmDBEntry *entry;
 	
 	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
 	
-	g_print("Mark.");
-	g_hash_table_insert(hash_table, entry, g_strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION)) );
+	g_print("Mark.\n");
+	const gchar *uri = rhythmdb_entry_get_string (entry, (RhythmDBPropType) RHYTHMDB_PROP_LOCATION);
+	if (uri) {
+		g_print("uri = %s\n", uri);
+	}
+	g_hash_table_insert ( *hash_table,
+			      entry,
+			      g_strdup ( uri ) );
 	g_print("Inserted.\n");
 	
 	
@@ -1892,7 +1898,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 				
 				gtk_tree_model_foreach (query_model,
 							(GtkTreeModelForeachFunc) rb_ipod_helpers_tree_view_insert,
-							itinerary_sync_hash);
+							&itinerary_sync_hash);
 				
 				g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
 				g_object_unref(query_model);
@@ -1906,7 +1912,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	g_print("Populated itinerary_sync_hash.\n");
 	
 	// duplicate ipod_priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_helpers_hash_table_insert, ipod_sync_hash );
+	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_helpers_hash_table_insert, &ipod_sync_hash );
 	
 	g_print("Populated ipod_sync_hash.\n");
 	return;
