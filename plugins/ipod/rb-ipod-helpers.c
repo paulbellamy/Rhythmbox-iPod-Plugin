@@ -642,7 +642,8 @@ rb_ipod_helpers_track_hash  (gconstpointer v)
 	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ALBUM));
 	
 	gchar buffer[50];
-	sprintf(buffer, "%lu", (unsigned long)rhythmdb_entry_get_ulong ((RhythmDBEntry *)v, RHYTHMDB_PROP_DURATION));
+//	sprintf(buffer, "%lu", (unsigned long)rhythmdb_entry_get_ulong ((RhythmDBEntry *)v, RHYTHMDB_PROP_DURATION));
+	sprintf(buffer, "%lu", (long unsigned int) rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v, RHYTHMDB_PROP_FILE_SIZE));
 	g_string_append (str, buffer);
 	
 	//g_print("hash_string: %s\n", str->str);

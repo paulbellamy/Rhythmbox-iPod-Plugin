@@ -1380,6 +1380,53 @@ get_ipod_filename (const char *mount_point, const char *filename)
 	return tmp;
 }
 
+void
+rb_ipod_source_add_entries (RBiPodSource *source, GList *entries)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	RhythmDB *db;
+	GList *tem;
+
+	db = get_db_for_source (source);
+	for (tem = entries; tem != NULL; tem = tem->next) {
+		Itdb_Track *song;
+		RhythmDBEntry *entry;
+		const char *uri;
+		guint64 filesize;
+		const char *mimetype;
+		char *filename;
+		const char *mount_path;
+		Itdb_Device *device;
+
+
+		entry = (RhythmDBEntry *)tem->data;
+		filesize = rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE);
+		mimetype = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_MIMETYPE);
+		song = create_ipod_song_from_entry (entry, mimetype);
+		uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
+		
+		filename = g_filename_from_uri (uri, NULL, NULL);
+		mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
+		song->ipod_path = ipod_path_from_unix_path (mount_path,
+							    filename);
+		g_free (filename);
+		
+		if (song->mediatype == MEDIATYPE_PODCAST) {
+			add_to_podcasts (source, song);
+		}
+		
+		device = rb_ipod_db_get_device (priv->ipod_db);		
+		if (device && itdb_device_supports_artwork (device)) {
+			request_artwork (source, entry, db, song);
+		}
+		add_ipod_song_to_db (source, db, song);
+		rb_ipod_db_add_track (priv->ipod_db, song);
+	}
+
+	rhythmdb_commit (db);
+	g_object_unref (db);
+}
+
 #define MAX_TRIES 5
 
 /* Strips non UTF8 characters from a string replacing them with _ */
@@ -1898,8 +1945,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	gchar *name;
 	RhythmDBEntryType entry_type;
 	GtkTreeModel *query_model;
-	gint64	space_needed_music = 0; // in MBs // Two separate values so we can display them seperately.
-	gint64	space_needed_podcasts = 0; // in MBs
+	gint64	space_needed_music = 0; // in bytes // Two separate values so we can display them seperately.
+	gint64	space_needed_podcasts = 0; // in bytes
 	RBiPodSourcePrivate *ipod_priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
 	HashTableComparisonData comparison_data;
 	
@@ -1954,9 +2001,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	}
 	
 	// duplicate ipod_priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( ipod_priv->entry_map,
-			       rb_ipod_source_hash_table_insert,
-			       &ipod_sync_hash );
+	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_source_hash_table_insert, &ipod_sync_hash );
 	
 	// Build the list of stuff to remove! (on ipod, but not in itinerary)
 	/* FIXME: This will append everything! Doesn't check between the lists.
@@ -1987,45 +2032,41 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	g_print("To Add:\n"); // DEBUGGING
 	for (list_iter = to_add; list_iter; list_iter = list_iter->next) {
 		// DEBUGGING
-		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE),
-					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
-					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM) );
-		/*
-		switch ( entry type ) {
-			case MUSIC:
-				space_needed_music += rhythmdb_entry_get_uint64 ( list_iter->data,
-										  RHYTHMDB_PROP_FILE_SIZE );
-				break;
-			case PODCAST:
-				space_needed_podcast += rhythmdb_entry_get_uint64 ( list_iter->data,
-										    RHYTHMDB_PROP_FILE_SIZE );
-				break;
-			default:
-				break;
+		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
+					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM),
+					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE) );
+		
+		entry_type = rhythmdb_entry_get_entry_type (list_iter->data);
+		if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG ) {
+			space_needed_music += (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
+										   RHYTHMDB_PROP_FILE_SIZE );
+		} else if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST) {
+			space_needed_podcasts += (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
+										      RHYTHMDB_PROP_FILE_SIZE );
+		} else {
+			//g_assert_not_reached ();
 		}
-		*/
 	}
 //	g_print("To Remove:\n"); // DEBUGGING
 	for (list_iter = to_remove; list_iter; list_iter = list_iter->next) {
 		// DEBUGGING
-//		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE),
-//					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
-//					      rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM) );
-		/*
-		switch ( entry type ) {
-			case MUSIC:
-				space_needed_music -= rhythmdb_entry_get_uint64 ( list_iter->data,
-										  RHYTHMDB_PROP_FILE_SIZE );
-				break;
-			case PODCAST:
-				space_needed_podcast -= rhythmdb_entry_get_uint64 ( list_iter->data,
-										    RHYTHMDB_PROP_FILE_SIZE );
-				break;
-			default:
-				break;
+		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
+					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM),
+					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE) );
+		
+		entry_type = rhythmdb_entry_get_entry_type (list_iter->data);
+		if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG ) {
+			space_needed_music -= (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
+										   RHYTHMDB_PROP_FILE_SIZE );
+		} else if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST) {
+			space_needed_podcasts -= (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
+										      RHYTHMDB_PROP_FILE_SIZE );
+		} else {
+			//g_assert_not_reached ();
 		}
-		*/
 	}
+	
+	g_print("Space Needed: Music -> %.2lf MB, Podcasts -> %.2lf MB, Total -> %.2lf MB\n", (long int)space_needed_music / 1000000.0, (long int)space_needed_podcasts / 1000000.0, (long int) (space_needed_music + space_needed_podcasts) / 1000000.0 );
 		
 	// Check we have enough space, on the iPod.
 	if ((space_needed_music + space_needed_podcasts) > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (ipod_priv->ipod_db))) {
@@ -2033,33 +2074,13 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	}
 	
 	// Remove tracks and podcasts on iPod, but not in itinerary
-	/* FIXME:
-	 * This needs to actually remove them from the iPod.
-	 *  Is there a remove function?
-	while(to_remove.hasNext ()) {
-		if ( (impl_get_sync_music(ipod_source) && itdb_track.isMusic())
-			|| (impl_get_sync_podcasts(ipod_source) && itdb_track.is_Podcast()) ) {
-			itdb_track = to_remove.getNext();
-			rb_ipod_db_track_remove (ipod_priv->ipod_db, itdb_track);
-		}
-	}
-	*/
+	//rb_ipod_source_trash_entries ( ipod_source, to_remove );
 	
 	// Done with this list, clear it.
 	g_list_free ( to_remove );
 	
 	// Transfer needed tracks and podcasts from itinerary to iPod
-	/* FIXME:
-	 * This needs to actually transfer them to the iPod.
-	 *  Is there a remove function?
-	while(to_add.hasNext ()) {
-		if ( (impl_get_sync_music(ipod_source) && lib_track.isMusic())
-			|| (impl_get_sync_podcasts(ipod_source) && lib_track.is_Podcast()) ) {
-			lib_track = to_add.getNext();
-			rb_ipod_db_track_add (ipod_priv->ipod_db, lib_track);
-		}
-	}
-	*/
+	//rb_ipod_source_add_entries ( ipod_source, to_add );
 	
 	// Done with this list, clear it.
 	g_list_free ( to_add );

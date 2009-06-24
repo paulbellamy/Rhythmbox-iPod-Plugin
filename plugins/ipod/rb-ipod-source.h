@@ -72,6 +72,9 @@ void			rb_ipod_source_show_properties	(RBiPodSource *source);
 
 void			rb_ipod_source_sync		(RBiPodSource *ipod_source);
 
+void			rb_ipod_source_add_entries	(RBiPodSource *source,
+							 GList *entries);
+
 void			rb_ipod_source_trash_entries	(RBiPodSource *source,
 							 GList *entries);
 
