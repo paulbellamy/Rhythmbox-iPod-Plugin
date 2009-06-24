@@ -1856,6 +1856,12 @@ rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 //		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
 //		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
 //		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) );
+	if ( g_hash_table_lookup ( *((GHashTable **) user_data), key) ) {
+		g_print("Hash Table Collision!\n"); // DEBUGGING
+		rb_debug ("Hash Table Collision when syncing.");
+		return;
+	}
+		
 	g_hash_table_insert ( *((GHashTable **) user_data),
 			      key,
 			      g_strdup ( rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) ) );

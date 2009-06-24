@@ -635,11 +635,17 @@ guint
 rb_ipod_helpers_track_hash  (gconstpointer v)
 {
 	/* This function is for hashing the two databases for syncing. */
-	GString *str = g_string_new ( rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_TITLE) );
-	
+	GString *str = g_string_new ( "" );
+	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_TITLE));
 	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ARTIST));
 	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_GENRE));
 	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ALBUM));
+	
+	gchar buffer[50];
+	sprintf(buffer, "%lu", (unsigned long)rhythmdb_entry_get_ulong ((RhythmDBEntry *)v, RHYTHMDB_PROP_DURATION));
+	g_string_append (str, buffer);
+	
+	//g_print("hash_string: %s\n", str->str);
 	
 	/* FIXME: The below might be needed for hashing podcasts properly,
 	 * but it gives "dereferencing to incomplete type"
@@ -649,7 +655,7 @@ rb_ipod_helpers_track_hash  (gconstpointer v)
 		g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_POST_TIME));
 	*/
 	
-	guint result = g_str_hash ( str );
+	guint result = g_string_hash ( str );
 	
 	g_string_free ( str, TRUE );
 	
