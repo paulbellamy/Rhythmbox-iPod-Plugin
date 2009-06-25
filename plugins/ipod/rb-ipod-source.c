@@ -1894,13 +1894,20 @@ rb_ipod_source_hash_table_compare (gpointer key,	// RhythmDBEntry *
 	}
 }
 
+typedef struct {
+	RBiPodSource *ipod_source;
+	GHashTable **hash_table;
+} HashTableInsertionData;
+
 static void
 rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 				   gpointer value,	// Whatever
-				   gpointer user_data ) // GHashTable **
+				   gpointer user_data ) // HashTableInsertionData *
 {
 	gpointer orig_key;
-	if ( g_hash_table_lookup_extended ( *((GHashTable **) user_data), key, &orig_key, NULL) ) {
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (((HashTableInsertionData *)user_data)->ipod_source);
+	GHashTable *hash_table = *(((HashTableInsertionData *)user_data)->hash_table);
+	if ( g_hash_table_lookup_extended ( hash_table, key, &orig_key, NULL) ) {
 		rb_debug ("Hash Table Collision between:\n%s - %s - %s, and\n%s - %s - %s",
 			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
 			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
@@ -1910,8 +1917,16 @@ rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
 		return;
 	}
+	
+	RhythmDBEntryType entry_type = rhythmdb_entry_get_entry_type(key);
+	if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG && !rb_ipod_prefs_get(priv->prefs, SYNC_MUSIC))
+		return;
+	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST && !rb_ipod_prefs_get(priv->prefs, SYNC_PODCASTS))
+		return;
+	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_FEED && !rb_ipod_prefs_get(priv->prefs, SYNC_PODCASTS))
+		return;
 		
-	g_hash_table_insert ( *((GHashTable **) user_data),
+	g_hash_table_insert ( hash_table,
 			      key,
 			      g_strdup ( rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) ) );
 }
@@ -1920,13 +1935,13 @@ static gboolean
 rb_ipod_source_tree_view_insert (GtkTreeModel *query_model,
 				  GtkTreePath  *path,
 				  GtkTreeIter  *iter,
-				  GHashTable   **hash_table)
+				  HashTableInsertionData *insertion_data)
 {
 	RhythmDBEntry *entry;
 	
 	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
 	
-	rb_ipod_source_hash_table_insert (entry, NULL, hash_table);
+	rb_ipod_source_hash_table_insert (entry, NULL, insertion_data);
 	
 	return FALSE;
 }
@@ -1947,6 +1962,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	gchar *name;
 	RhythmDBEntryType entry_type;
 	GtkTreeModel *query_model;
+	HashTableInsertionData insertion_data = { ipod_source, &itinerary_sync_hash };
 	gint64	space_needed_music = 0; // in bytes // Two separate values so we can display them seperately.
 	gint64	space_needed_podcasts = 0; // in bytes
 	RBiPodSourcePrivate *ipod_priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
@@ -1966,44 +1982,59 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	//rb_playlist_manager_get_playlist_names ((RBPlaylistManager *) rb_shell_get_playlist_manager (shell),
 	//					&playlists,
 	//					NULL);
-	playlists = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
-	for ( iter = (const gchar **) rb_ipod_prefs_get_entries( ipod_priv->prefs );
-	      *iter != NULL;
-	      iter++ )
+	if (rb_ipod_prefs_get(ipod_priv->prefs, SYNC_MUSIC) && rb_ipod_prefs_get (ipod_priv->prefs, SYNC_MUSIC_ALL)) {
+		// Syncing all songs
+		query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(library_db));
+		rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
+					RHYTHMDB_QUERY_PROP_EQUALS,
+					RHYTHMDB_PROP_TYPE, RHYTHMDB_ENTRY_TYPE_SONG,
+					RHYTHMDB_QUERY_END);
+		gtk_tree_model_foreach (query_model,
+					(GtkTreeModelForeachFunc) rb_ipod_source_tree_view_insert,
+					&insertion_data);
+	}
+	if (rb_ipod_prefs_get(ipod_priv->prefs, SYNC_PODCASTS) && rb_ipod_prefs_get (ipod_priv->prefs, SYNC_PODCASTS_ALL)) {
+		// Syncing all songs
+		query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(library_db));
+		rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
+					RHYTHMDB_QUERY_PROP_EQUALS,
+					RHYTHMDB_PROP_TYPE, RHYTHMDB_ENTRY_TYPE_PODCAST_POST,
+					RHYTHMDB_QUERY_END);
+		gtk_tree_model_foreach (query_model,
+					(GtkTreeModelForeachFunc) rb_ipod_source_tree_view_insert,
+					&insertion_data);
+	}
+	if (!rb_ipod_prefs_get (ipod_priv->prefs, SYNC_MUSIC_ALL)
+	    || !rb_ipod_prefs_get (ipod_priv->prefs, SYNC_PODCASTS_ALL))
 	{
-		// get playlist with ( g_strcmp(name, iter) == 0 )
-		for (list_iter = playlists;  list_iter; list_iter = list_iter->next ) {
-			g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL); // This gripes about something being uninstantiable
-			if ( strcmp( name, *iter ) == 0 ) {
-	g_print("Found Playlist: %s\n", name);
-				// Get it's entries, and add them to the itinerary_sync_hash
-				g_object_get (G_OBJECT (list_iter->data), "entry-type", &entry_type, NULL);
-	
-				query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty (library_db));
-				
-				/* FIXME: Query NOT done!
-				 */
-				rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
-//							RHYTHMDB_QUERY_PROP_EQUALS,		// DEBUGGING
-//							RHYTHMDB_PROP_ARTIST, "Balmorhea",	// DEBUGGING
-						        RHYTHMDB_QUERY_PROP_EQUALS,
-						        RHYTHMDB_PROP_TYPE, entry_type,
-							RHYTHMDB_QUERY_END);
-				
-				gtk_tree_model_foreach (query_model,
-							(GtkTreeModelForeachFunc) rb_ipod_source_tree_view_insert,
-							&itinerary_sync_hash);
-				
-				g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
-				g_object_unref(query_model);
-			
-				break;
+		playlists = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
+		for ( iter = (const gchar **) rb_ipod_prefs_get_entries( ipod_priv->prefs );
+		      *iter != NULL;
+		      iter++ )
+		{
+			// get playlist with ( g_strcmp(name, iter) == 0 )
+			for (list_iter = playlists;  list_iter; list_iter = list_iter->next ) {
+				g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL); // This gripes about something being uninstantiable
+				if ( strcmp( name, *iter ) == 0 ) {
+					g_print("Found Playlist: %s\n", name); // DEBUGGING
+					rhythmdb_entry_get_entry_type (list_iter->data);
+					
+					// Get it's entries, and add them to the itinerary_sync_hash
+					query_model = GTK_TREE_MODEL (rb_playlist_source_get_query_model (list_iter->data));
+					
+					gtk_tree_model_foreach (query_model,
+								(GtkTreeModelForeachFunc) rb_ipod_source_tree_view_insert,
+								&insertion_data);
+					
+					break;
+				}
 			}
 		}
 	}
 	
 	// duplicate ipod_priv->entry_map, into ipod_hash so it can be compared with itinerary_hash
-	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_source_hash_table_insert, &ipod_sync_hash );
+	insertion_data.hash_table = &ipod_sync_hash;
+	g_hash_table_foreach ( ipod_priv->entry_map, rb_ipod_source_hash_table_insert, &insertion_data );
 	
 	// Build the list of stuff to remove! (on ipod, but not in itinerary)
 	/* FIXME: This will append everything! Doesn't check between the lists.
