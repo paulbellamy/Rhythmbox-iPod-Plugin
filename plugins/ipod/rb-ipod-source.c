@@ -1384,29 +1384,47 @@ void
 rb_ipod_source_add_entries (RBiPodSource *source, GList *entries)
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	RhythmDB *db;
+	RhythmDB *db = get_db_for_source (source);
 	GList *tem;
-
-	db = get_db_for_source (source);
-	for (tem = entries; tem != NULL; tem = tem->next) {
-		Itdb_Track *song;
-		RhythmDBEntry *entry;
-		const char *uri;
-		guint64 filesize;
-		const char *mimetype;
-		char *filename;
-		const char *mount_path;
-		Itdb_Device *device;
-
-
+	Itdb_Track *song;
+	RhythmDBEntry *entry;
+	const char *uri;
+	guint64 filesize;
+	const char *mimetype;
+	char *filename;
+	const char *mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
+	Itdb_Device *device = rb_ipod_db_get_device (priv->ipod_db);
+	
+//	g_print("mount_path = %s\n",mount_path);
+	
+	for (tem = entries; tem; tem = tem->next) {
+		
+		/*
+		impl_track_added ((RBRemovableMediaSource *) source,
+				  entry,
+				  const char *dest,
+				  filesize,
+				  mimetype);
+		*/
 		entry = (RhythmDBEntry *)tem->data;
+		
+//		g_print("Transferring: %20s - %20s - %10s\n",
+//			rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
+//			rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
+//			rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
+		
 		filesize = rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE);
 		mimetype = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_MIMETYPE);
 		song = create_ipod_song_from_entry (entry, mimetype);
 		uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
 		
+		// Skip undownloaded podcasts
+		if (song->mediatype == MEDIATYPE_PODCAST)
+			if (rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_STATUS) != 100)
+				continue;
+		
 		filename = g_filename_from_uri (uri, NULL, NULL);
-		mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
+//g_print("uri = %s\nfilename = %s\n", uri, filename);
 		song->ipod_path = ipod_path_from_unix_path (mount_path,
 							    filename);
 		g_free (filename);
@@ -1415,10 +1433,10 @@ rb_ipod_source_add_entries (RBiPodSource *source, GList *entries)
 			add_to_podcasts (source, song);
 		}
 		
-		device = rb_ipod_db_get_device (priv->ipod_db);		
 		if (device && itdb_device_supports_artwork (device)) {
 			request_artwork (source, entry, db, song);
 		}
+		
 		add_ipod_song_to_db (source, db, song);
 		rb_ipod_db_add_track (priv->ipod_db, song);
 	}
@@ -1926,6 +1944,8 @@ rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_FEED && !rb_ipod_prefs_get(priv->prefs, SYNC_PODCASTS))
 		return;
 		
+	//g_print("entry_type->name: %s\n", entry_type->name); // DEBUGGING
+		
 	g_hash_table_insert ( hash_table,
 			      key,
 			      g_strdup ( rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) ) );
@@ -2062,12 +2082,12 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	
 	// Calculate How much Music and Podcasts needs transferring
 	// FIXME: This seem inefficient
-	g_print("To Add:\n"); // DEBUGGING
+//	g_print("To Add:\n"); // DEBUGGING
 	for (list_iter = to_add; list_iter; list_iter = list_iter->next) {
 		// DEBUGGING
-		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
-					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM),
-					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE) );
+//		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
+//					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM),
+//					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE) );
 		
 		entry_type = rhythmdb_entry_get_entry_type (list_iter->data);
 		if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG ) {
@@ -2080,12 +2100,12 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 			//g_assert_not_reached ();
 		}
 	}
-	g_print("To Remove:\n"); // DEBUGGING
+//	g_print("To Remove:\n"); // DEBUGGING
 	for (list_iter = to_remove; list_iter; list_iter = list_iter->next) {
 		// DEBUGGING
-		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
-					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM),
-					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE) );
+//		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),
+//					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ALBUM),
+//					       rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_TITLE) );
 		
 		entry_type = rhythmdb_entry_get_entry_type (list_iter->data);
 		if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG ) {
@@ -2107,13 +2127,13 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	}
 	
 	// Remove tracks and podcasts on iPod, but not in itinerary
-	//rb_ipod_source_trash_entries ( ipod_source, to_remove );
+	rb_ipod_source_trash_entries ( ipod_source, to_remove );
 	
 	// Done with this list, clear it.
 	g_list_free ( to_remove );
 	
 	// Transfer needed tracks and podcasts from itinerary to iPod
-	//rb_ipod_source_add_entries ( ipod_source, to_add );
+	rb_ipod_source_add_entries ( ipod_source, to_add );
 	
 	// Done with this list, clear it.
 	g_list_free ( to_add );
