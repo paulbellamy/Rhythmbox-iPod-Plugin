@@ -1899,13 +1899,15 @@ rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 				   gpointer value,	// Whatever
 				   gpointer user_data ) // GHashTable **
 {
-//	g_print("Inserting:\t%10s - %10s => %10s\n",
-//		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
-//		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
-//		rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) );
-	if ( g_hash_table_lookup ( *((GHashTable **) user_data), key) ) {
-		g_print("Hash Table Collision!\n"); // DEBUGGING
-		rb_debug ("Hash Table Collision when syncing.");
+	gpointer orig_key;
+	if ( g_hash_table_lookup_extended ( *((GHashTable **) user_data), key, &orig_key, NULL) ) {
+		rb_debug ("Hash Table Collision between:\n%s - %s - %s, and\n%s - %s - %s",
+			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
+			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
+			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ALBUM),
+			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_TITLE),
+			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ARTIST),
+			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
 		return;
 	}
 		
@@ -1982,8 +1984,8 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 				/* FIXME: Query NOT done!
 				 */
 				rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
-							RHYTHMDB_QUERY_PROP_EQUALS,		// DEBUGGING
-							RHYTHMDB_PROP_ARTIST, "Balmorhea",	// DEBUGGING
+//							RHYTHMDB_QUERY_PROP_EQUALS,		// DEBUGGING
+//							RHYTHMDB_PROP_ARTIST, "Balmorhea",	// DEBUGGING
 						        RHYTHMDB_QUERY_PROP_EQUALS,
 						        RHYTHMDB_PROP_TYPE, entry_type,
 							RHYTHMDB_QUERY_END);
@@ -2047,7 +2049,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 			//g_assert_not_reached ();
 		}
 	}
-//	g_print("To Remove:\n"); // DEBUGGING
+	g_print("To Remove:\n"); // DEBUGGING
 	for (list_iter = to_remove; list_iter; list_iter = list_iter->next) {
 		// DEBUGGING
 		g_print("%10s - %10s, %10s\n", rhythmdb_entry_get_string(list_iter->data, RHYTHMDB_PROP_ARTIST),

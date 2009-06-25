@@ -49,6 +49,8 @@
 #include "rb-debug.h"
 #include "rb-dialog.h"
 
+#include "rhythmdb.h"
+
 
 enum {
       COL_INFO = 0,
@@ -635,16 +637,15 @@ guint
 rb_ipod_helpers_track_hash  (gconstpointer v)
 {
 	/* This function is for hashing the two databases for syncing. */
-	GString *str = g_string_new ( "" );
-	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_TITLE));
-	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ARTIST));
-	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_GENRE));
-	g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_ALBUM));
-	
-	gchar buffer[50];
-//	sprintf(buffer, "%lu", (unsigned long)rhythmdb_entry_get_ulong ((RhythmDBEntry *)v, RHYTHMDB_PROP_DURATION));
-	sprintf(buffer, "%lu", (long unsigned int) rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v, RHYTHMDB_PROP_FILE_SIZE));
-	g_string_append (str, buffer);
+	GString *str = g_string_new ("");
+	RhythmDBEntry *entry = (RhythmDBEntry *)v;
+
+	g_string_printf (str, "%s%s%s%s%"G_GUINT64_FORMAT,
+			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
+			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
+			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_GENRE),
+			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM),
+			 rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE));
 	
 	//g_print("hash_string: %s\n", str->str);
 	
@@ -667,23 +668,42 @@ gboolean
 rb_ipod_helpers_track_equal (gconstpointer v1,
 			     gconstpointer v2)
 {
-	/* This function is for telling if two tracks are identical. */
-	return (rb_ipod_helpers_track_hash (v1) == rb_ipod_helpers_track_hash (v2));
-
-
-//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE)) == 0)
-//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ARTIST), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ARTIST)) == 0)
-//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_GENRE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_GENRE)) == 0)
-//	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ALBUM), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ALBUM)) == 0)
-//	{
-//		g_print("%10s - %10s == %10s - %10s\n",
-//			rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE),
-//			rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ARTIST),
-//			rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE),
-//			rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ARTIST));
-//		return TRUE;
-//	}
-//	
-//	return FALSE;	
+	/* This function is for telling if two tracks are identical.
+	 * It ignores URI and file_name because that will be different on the iPod and the Library.
+	 */
+	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE)) != 0)
+		return FALSE;
+	
+	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ARTIST), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ARTIST)) != 0)
+		return FALSE;
+	
+	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_GENRE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_GENRE)) != 0)
+		return FALSE;
+	
+	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ALBUM), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ALBUM)) != 0)
+		return FALSE;
+	
+	if ( rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v1, RHYTHMDB_PROP_FILE_SIZE) != rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v2, RHYTHMDB_PROP_FILE_SIZE) )
+		return FALSE;
+	
+	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DURATION) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DURATION) )
+		return FALSE;
+	
+	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TRACK_NUMBER) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TRACK_NUMBER) )
+		return FALSE;
+	
+	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DISC_NUMBER) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DISC_NUMBER) )
+		return FALSE;
+	
+	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DATE) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DATE) )
+		return FALSE;
+	
+	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_YEAR) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_YEAR) )
+		return FALSE;
+	
+	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_POST_TIME) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_POST_TIME) )
+		return FALSE;
+	
+	return TRUE;
 }
 
