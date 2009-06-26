@@ -1379,70 +1379,50 @@ get_ipod_filename (const char *mount_point, const char *filename)
 	g_free (result);
 	return tmp;
 }
+/*
+void
+rb_ipod_source_add_entry (RBiPodSource *source, RhythmDBEntry *entry)
+{
+	rb_removable_media_source_should_paste ((RBRemovableMediaSource *)source,
+						entry);
+	
+g_print("Transferring: %20s - %20s - %10s\n",
+	rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
+	rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
+	rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
+		
+		// Skip undownloaded podcasts
+		if (rhythmdb_entry_get_entry_type(entry) == RHYTHMDB_ENTRY_TYPE_PODCAST_POST
+		    || rhythmdb_entry_get_entry_type(entry) == RHYTHMDB_ENTRY_TYPE_PODCAST_FEED)
+		{
+			if (rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_STATUS) != 100)
+				return;
+		}
+		
+		RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE(source);
+		const gchar *mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
+		
+g_print("mount_path = %s\n",mount_path);
+		
+		const gchar *filename = g_filename_from_uri (rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION),
+						      NULL,
+						      NULL);
+		const gchar *dest = ipod_path_from_unix_path (mount_path, filename);
+		
+g_print("filename = %s\ndest = %s\n", filename, dest);
 
+		impl_track_added ((RBRemovableMediaSource *) source,
+				  entry,
+				  ipod_path_from_unix_path (mount_path, filename),
+				  rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE),
+				  rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_MIMETYPE));
+	
+}
+*/
 void
 rb_ipod_source_add_entries (RBiPodSource *source, GList *entries)
 {
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	RhythmDB *db = get_db_for_source (source);
-	GList *tem;
-	Itdb_Track *song;
-	RhythmDBEntry *entry;
-	const char *uri;
-	guint64 filesize;
-	const char *mimetype;
-	char *filename;
-	const char *mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
-	Itdb_Device *device = rb_ipod_db_get_device (priv->ipod_db);
-	
-//	g_print("mount_path = %s\n",mount_path);
-	
-	for (tem = entries; tem; tem = tem->next) {
-		
-		/*
-		impl_track_added ((RBRemovableMediaSource *) source,
-				  entry,
-				  const char *dest,
-				  filesize,
-				  mimetype);
-		*/
-		entry = (RhythmDBEntry *)tem->data;
-		
-//		g_print("Transferring: %20s - %20s - %10s\n",
-//			rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
-//			rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
-//			rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
-		
-		filesize = rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE);
-		mimetype = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_MIMETYPE);
-		song = create_ipod_song_from_entry (entry, mimetype);
-		uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
-		
-		// Skip undownloaded podcasts
-		if (song->mediatype == MEDIATYPE_PODCAST)
-			if (rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_STATUS) != 100)
-				continue;
-		
-		filename = g_filename_from_uri (uri, NULL, NULL);
-//g_print("uri = %s\nfilename = %s\n", uri, filename);
-		song->ipod_path = ipod_path_from_unix_path (mount_path,
-							    filename);
-		g_free (filename);
-		
-		if (song->mediatype == MEDIATYPE_PODCAST) {
-			add_to_podcasts (source, song);
-		}
-		
-		if (device && itdb_device_supports_artwork (device)) {
-			request_artwork (source, entry, db, song);
-		}
-		
-		add_ipod_song_to_db (source, db, song);
-		rb_ipod_db_add_track (priv->ipod_db, song);
-	}
-
-	rhythmdb_commit (db);
-	g_object_unref (db);
+	rb_source_paste ((RBSource *)source, entries);
 }
 
 #define MAX_TRIES 5
@@ -1939,10 +1919,15 @@ rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 	RhythmDBEntryType entry_type = rhythmdb_entry_get_entry_type(key);
 	if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG && !rb_ipod_prefs_get(priv->prefs, SYNC_MUSIC))
 		return;
-	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST && !rb_ipod_prefs_get(priv->prefs, SYNC_PODCASTS))
-		return;
-	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_FEED && !rb_ipod_prefs_get(priv->prefs, SYNC_PODCASTS))
-		return;
+	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST
+	    || entry_type == RHYTHMDb_ENTRY_TYPE_PODCAST_FEED)
+	{
+		if (!rb_ipod_prefs_get(priv->prefs, SYNC_PODCASTS))
+			return;
+		
+		if (rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_STATUS) != 100)
+			return;
+	}
 		
 	//g_print("entry_type->name: %s\n", entry_type->name); // DEBUGGING
 		
