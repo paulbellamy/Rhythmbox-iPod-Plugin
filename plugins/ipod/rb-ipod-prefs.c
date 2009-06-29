@@ -248,3 +248,66 @@ rb_ipod_prefs_set_entries (RBiPodPrefs *prefs,
 	rb_ipod_prefs_save_file (prefs, NULL);
 }
 
+gchar *
+rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
+			  gchar * entry )
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	
+	gchar **iter;
+	
+	for (iter = priv->sync_entries;
+	     *iter != NULL;
+	     iter++)
+	{
+		if (g_strcmp0 (*iter, entry) == 0)
+			return *iter;
+	}
+	
+	return NULL;
+}
+
+void
+rb_ipod_prefs_set_entry ( RBiPodPrefs *prefs,
+			  gchar * entry,
+			  gboolean value )
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	
+	// See if it is in the list
+	gchar ** iter;
+
+	if (rb_ipod_prefs_get_entry (prefs, entry)) {
+		// If it is in the list, remove it
+		if (!value) {
+			gchar * dest[g_strv_length (priv->sync_entries) - 1];
+			gchar **dest_iter = dest;
+			for (iter = priv->sync_entries;
+			     *iter != NULL;
+			     iter++)
+			{
+				if (g_strcmp0 (*dest_iter, entry))
+					iter++;
+				
+				*dest_iter = g_strdup (*iter);
+				dest_iter++;
+			}
+			
+			iter = priv->sync_entries;
+			priv->sync_entries = dest;
+			g_strfreev (iter);
+		
+			rb_ipod_prefs_save_file (prefs, NULL);
+		}
+	} else {
+		// If not in list yet, add it
+		if (value) {
+			iter = priv->sync_entries;
+			while (*iter != NULL) iter++;
+			*iter = g_strdup(entry);
+			
+			rb_ipod_prefs_save_file (prefs, NULL);
+		}
+	}
+}
+
