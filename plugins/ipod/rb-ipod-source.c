@@ -53,6 +53,7 @@
 #include "rb-ipod-prefs.h"
 #include "rb-playlist-source.h"
 #include "rb-playlist-manager.h"
+#include "rb-podcast-manager.h"
 
 #define CONF_STATE_PANED_POSITION CONF_PREFIX "/state/ipod/paned_position"
 #define CONF_STATE_SHOW_BROWSER   CONF_PREFIX "/state/ipod/show_browser"
@@ -1392,12 +1393,8 @@ g_print("Transferring: %20s - %20s - %10s\n",
 	rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
 		
 		// Skip undownloaded podcasts
-		if (rhythmdb_entry_get_entry_type(entry) == RHYTHMDB_ENTRY_TYPE_PODCAST_POST
-		    || rhythmdb_entry_get_entry_type(entry) == RHYTHMDB_ENTRY_TYPE_PODCAST_FEED)
-		{
-			if (rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_STATUS) != 100)
-				return;
-		}
+		if (!rb_podcast_manager_entry_downloaded (entry))
+			return;
 		
 		RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE(source);
 		const gchar *mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
@@ -1708,14 +1705,12 @@ rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 			   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
 }
 
-/* FIXME: Unused! not hooked up to treeview yet. pending UI redesign
- *
 static void
-rb_ipod_sync_entries_changed_cb (GtkTreeView *treeview,
+rb_ipod_sync_entries_changed_cb (GtkCheckButton *check_button,
 				 gpointer     user_data)
 {
-	*//* FIXME: Needs to Get gchar ** of playlists from treeview
-	 *//*
+	/* FIXME: Needs to Get gchar ** of playlists from treeview
+	 */
 	gchar ** entries = NULL;
 	gsize length = 0;
 	
@@ -1723,7 +1718,6 @@ rb_ipod_sync_entries_changed_cb (GtkTreeView *treeview,
 				   entries,
 				   length);
 }
-*/
 
 void
 rb_ipod_source_show_properties (RBiPodSource *source)
@@ -1740,6 +1734,8 @@ rb_ipod_source_show_properties (RBiPodSource *source)
  	
 	Itdb_Device *ipod_dev;
 	RBPlugin *plugin;
+	
+	RBShell *shell;
 
 	if (priv->ipod_db == NULL) {
 		rb_debug ("can't show ipod properties with no ipod db");
@@ -1838,8 +1834,79 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	
 	/* FIXME: Needs to set up the treeview here, also
 	 */
+	// Set tree models for each treeview
 	gchar ** entries = g_strdupv((gchar **)rb_ipod_prefs_get_entries (priv->prefs));
+	GtkListStore *list_store = gtk_list_store_new (2, GTK_TYPE_CHECK_BUTTON, G_TYPE_STRING);
+	GtkTreeIter  tree_iter;
+	GList * list_iter;
+	const gchar ** text_iter;
+	GtkWidget *check_button;
+	gchar *name;
+	// Set up the treeview for the playlists
+	g_object_get (source, "shell", &shell, NULL);
+	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
+	label = gtk_builder_get_object (builder, "treeview-ipod-sync-music");
+	while (list_iter) {
+		gtk_list_store_append (list_store, &tree_iter);
+		// set playlists data here
+		g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
+		check_button = gtk_check_button_new ();
+		
+		// Get selections from entries
+		for (text_iter = (const gchar **) entries; *text_iter; text_iter++) {
+			if (strcmp (*text_iter, name) == 0) {
+				gtk_toggle_button_set_active ((GtkToggleButton *)check_button,
+							      TRUE);
+				break;
+			}
+		}
+		
+		gtk_list_store_set (list_store, &tree_iter,
+				    0, check_button,
+				    1, name,
+				    -1);
+		
+	 	g_signal_connect (check_button, "toggled",
+	 			  (GCallback)rb_ipod_sync_entries_changed_cb, priv->prefs);
+                
+		list_iter = list_iter->next;
+	}
+	gtk_tree_view_set_model ((GtkTreeView *)label,
+				 (GtkTreeModel *)list_store);
+	
+	// Set up the treeview for the podcasts
+	label = gtk_builder_get_object (builder, "treeview-ipod-sync-podcasts");
+	list_iter = NULL; // need to get list of podcast feeds here
+	while (list_iter) {
+		gtk_list_store_append (list_store, &tree_iter);
+		// set playlists data here
+		g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
+		check_button = gtk_check_button_new ();
+		
+		// Get selections from entries
+		for (text_iter = (const gchar **) entries; *text_iter; text_iter++) {
+			if (strcmp (*text_iter, name) == 0) {
+				gtk_toggle_button_set_active ((GtkToggleButton *)check_button,
+							      TRUE);
+				break;
+			}
+		}
+		
+		gtk_list_store_set (list_store, &tree_iter,
+				    0, check_button,
+				    1, name,
+				    -1);
+		
+	 	g_signal_connect (check_button, "toggled",
+	 			  (GCallback)rb_ipod_sync_entries_changed_cb, priv->prefs);
+		
+		list_iter = list_iter->next;
+	}
+	gtk_tree_view_set_model ((GtkTreeView *)label,
+				 (GtkTreeModel *)list_store);
+	
 	g_strfreev(entries);
+	g_object_unref (shell);
 
 	label = gtk_builder_get_object (builder, "label-device-node-value");
 	text = rb_ipod_helpers_get_device (RB_SOURCE(source));
@@ -1920,14 +1987,13 @@ rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 	if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG && !rb_ipod_prefs_get(priv->prefs, SYNC_MUSIC))
 		return;
 	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST
-	    || entry_type == RHYTHMDb_ENTRY_TYPE_PODCAST_FEED)
+	    || entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_FEED)
 	{
 		if (!rb_ipod_prefs_get(priv->prefs, SYNC_PODCASTS))
 			return;
-		
-		if (rhythmdb_entry_get_ulong (entry, RHYTHMDB_PROP_STATUS) != 100)
-			return;
 	}
+	if (!rb_podcast_manager_entry_downloaded (key))
+		return;
 		
 	//g_print("entry_type->name: %s\n", entry_type->name); // DEBUGGING
 		
