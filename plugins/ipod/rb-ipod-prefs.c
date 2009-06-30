@@ -42,7 +42,7 @@ typedef struct {
 	gboolean sync_music_all;
 	gboolean sync_podcasts;
 	gboolean sync_podcasts_all;
-	gchar ** sync_entries;
+	GList *  sync_entries;
 } RBiPodPrefsPrivate;
 
 G_DEFINE_TYPE (RBiPodPrefs, rb_ipod_prefs, G_TYPE_OBJECT)
@@ -65,7 +65,7 @@ rb_ipod_prefs_dispose (GObject *object)
 		g_free( priv->group );
 
 	if (priv->sync_entries != NULL)
-		g_strfreev( priv->sync_entries );
+		g_list_free( priv->sync_entries );
 	
 	
 	G_OBJECT_CLASS (rb_ipod_prefs_parent_class)->dispose (object);
@@ -174,7 +174,12 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	priv->sync_music_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music_all", NULL);
 	priv->sync_podcasts = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts", NULL);
 	priv->sync_podcasts_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts_all", NULL);
-	priv->sync_entries = g_key_file_get_string_list (priv->key_file, priv->group, "sync_entries", NULL, NULL);
+	
+	gchar ** entries = g_key_file_get_string_list (priv->key_file, priv->group, "sync_entries", NULL, NULL);
+	while (*entries != NULL) {
+		priv->sync_entries = g_list_append (priv->sync_entries, *entries);
+		entries++;
+	}
 	
      	return prefs;
 }
@@ -234,34 +239,42 @@ rb_ipod_prefs_set ( RBiPodPrefs *prefs,
 
 void
 rb_ipod_prefs_set_entries (RBiPodPrefs *prefs,
-			   gchar ** entries,
+			   GList * entries,
 			   gsize length )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	if (priv->sync_entries != NULL)
-		g_strfreev(priv->sync_entries);
+	g_list_free(priv->sync_entries);
+	priv->sync_entries = entries;
 	
-	priv->sync_entries = g_strdupv(entries);
-	g_key_file_set_string_list (priv->key_file, priv->group, "sync_entries", (const gchar * const *)priv->sync_entries, length );
+	gchar * array[length];
+	int i = 0;
+	GList *iter = entries;
+	while (i < length) {
+		array[i] = g_strdup (iter->data);
+		iter = iter->next;
+		i++;
+	}
+	
+	g_key_file_set_string_list (priv->key_file, priv->group, "sync_entries", (const gchar * const *)array, length );
 	
 	rb_ipod_prefs_save_file (prefs, NULL);
 }
 
 gchar *
 rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
-			  gchar * entry )
+			  const gchar * entry )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	gchar **iter;
+	GList * iter;
 	
 	for (iter = priv->sync_entries;
-	     *iter != NULL;
-	     iter++)
+	     iter != NULL;
+	     iter = iter->next)
 	{
-		if (g_strcmp0 (*iter, entry) == 0)
-			return *iter;
+		if (g_strcmp0 (iter->data, entry) == 0)
+			return iter->data;
 	}
 	
 	return NULL;
@@ -269,45 +282,19 @@ rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
 
 void
 rb_ipod_prefs_set_entry ( RBiPodPrefs *prefs,
-			  gchar * entry,
+			  const gchar * entry,
 			  gboolean value )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	// See if it is in the list
-	gchar ** iter;
-
-	if (rb_ipod_prefs_get_entry (prefs, entry)) {
-		// If it is in the list, remove it
-		if (!value) {
-			gchar * dest[g_strv_length (priv->sync_entries) - 1];
-			gchar **dest_iter = dest;
-			for (iter = priv->sync_entries;
-			     *iter != NULL;
-			     iter++)
-			{
-				if (g_strcmp0 (*dest_iter, entry))
-					iter++;
-				
-				*dest_iter = g_strdup (*iter);
-				dest_iter++;
-			}
-			
-			iter = priv->sync_entries;
-			priv->sync_entries = dest;
-			g_strfreev (iter);
-		
+	if (value) {
+		if (!rb_ipod_prefs_get_entry (prefs, entry)) {
+			priv->sync_entries = g_list_append (priv->sync_entries, g_strdup (entry));
 			rb_ipod_prefs_save_file (prefs, NULL);
 		}
 	} else {
-		// If not in list yet, add it
-		if (value) {
-			iter = priv->sync_entries;
-			while (*iter != NULL) iter++;
-			*iter = g_strdup(entry);
-			
-			rb_ipod_prefs_save_file (prefs, NULL);
-		}
+		priv->sync_entries = g_list_remove (priv->sync_entries, entry);
+		rb_ipod_prefs_save_file (prefs, NULL);
 	}
 }
 

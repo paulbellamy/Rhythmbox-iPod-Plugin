@@ -1707,38 +1707,43 @@ rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 */
 typedef struct {
 	RBiPodPrefs *prefs;
-	GtkTreeModel *model;
+	GtkTreeStore *tree_store;
+	GtkTreeView  *tree_view;
 } RBiPodSyncEntriesChangedData;
 
 static void
 rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 				 gchar	      *path,
-				 gpointer     user_data)
+				 RBiPodSyncEntriesChangedData *data)
 {
 	// FIXME: path may not be correct
 	GtkTreeIter   iter;
-	RBiPodSyncEntriesChangedData *data = user_data;
 	
-	if (gtk_tree_model_get_iter(data->model,
-				    &iter,
-				    gtk_tree_path_new_from_string (path)))
+	if ( gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, path) == TRUE )
 	{
 		gchar *name;
+		gboolean value;
 		
-		gtk_tree_model_get(data->model, &iter, 1, &name, -1);
+		gtk_tree_model_get(GTK_TREE_MODEL (data->tree_store), &iter, 1, &name, -1);
+		value = !gtk_cell_renderer_toggle_get_active (cell_renderer);
+		
+		gtk_tree_store_set (data->tree_store,
+				    &iter,
+				    0, value,
+				    -1 );
 		
 		if (g_strcmp0 (name, "Music") == 0) {
 			rb_ipod_prefs_set (data->prefs,		// RBiPodPrefs *
-					   SYNC_MUSIC_ALL,	// int
-					   gtk_cell_renderer_toggle_get_active (cell_renderer)); // gboolean *
+					   SYNC_MUSIC,		// int
+					   value);		// gboolean
 		} else if (g_strcmp0 (name, "Podcasts") == 0) {
 			rb_ipod_prefs_set (data->prefs,		// RBiPodPrefs *
-					   SYNC_PODCASTS_ALL,	// int
-					   gtk_cell_renderer_toggle_get_active (cell_renderer)); // gboolean *
+					   SYNC_PODCASTS,	// int
+					   value);		// gboolean
 		} else {
 			rb_ipod_prefs_set_entry (data->prefs,	// RBiPodPrefs *
 						 name,		// gchar * of the entry changed
-						 gtk_cell_renderer_toggle_get_active (cell_renderer)); // gboolean *
+						 value);	// gboolean
 		}
 	}
 }
@@ -1860,67 +1865,44 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	/* FIXME: Needs to set up the treeview here, also
 	 */
 	// Set tree models for each treeview
+	label = gtk_builder_get_object (builder, "treeview-ipod-sync");
 	gchar ** entries = g_strdupv((gchar **)rb_ipod_prefs_get_entries (priv->prefs));
 	GtkTreeStore *tree_store = gtk_tree_store_new (2, G_TYPE_BOOLEAN, G_TYPE_STRING);
 	GtkTreeIter  tree_iter;
 	GtkTreeIter  parent_iter;
 	GList * list_iter;
-	gboolean row_value;
 	GtkTreeViewColumn *col;
 	GtkCellRenderer *renderer;
 	gchar *name;
 	RhythmDB *library_db;
-	
-	RBiPodSyncEntriesChangedData entries_changed_data;
-	entries_changed_data.prefs = priv->prefs;
-	entries_changed_data.model = (GtkTreeModel *)tree_store;
-	
+	RBiPodSyncEntriesChangedData *entries_changed_data = g_new0 (RBiPodSyncEntriesChangedData, 1);
+	entries_changed_data->prefs = priv->prefs;
+	entries_changed_data->tree_store = tree_store;
+	entries_changed_data->tree_view = GTK_TREE_VIEW (label);
+		
 	g_object_get (source, "shell", &shell, NULL);
 	g_object_get (shell, "db", &library_db, NULL);
 	
-	// Set up the treeview for the playlists
-	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
-	label = gtk_builder_get_object (builder, "treeview-ipod-sync");
-	
-	/* First column */
-	renderer = gtk_cell_renderer_toggle_new();
-	col = gtk_tree_view_column_new_with_attributes (NULL,
-							renderer,
-							"active", 0,
-							NULL);
-	g_signal_connect (G_OBJECT(renderer),
-			  "toggled", G_CALLBACK (rb_ipod_sync_entries_changed_cb),
-			  &entries_changed_data);
-	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
-	
-	/* Second column */
-	renderer = gtk_cell_renderer_text_new();
-	col = gtk_tree_view_column_new_with_attributes (NULL,
-							renderer,
-							"text", 1,
-							NULL);
-	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
+	// Set up the treestore
 	
 	/* Append the Music Library Parent */
 	gtk_tree_store_append (tree_store,
 			       &parent_iter,
 			       NULL);
 	gtk_tree_store_set (tree_store, &parent_iter,
-			    0, rb_ipod_prefs_get (priv->prefs, SYNC_MUSIC_ALL),
-			    1, "Music",
+			    0, rb_ipod_prefs_get (priv->prefs, SYNC_MUSIC),
+			    1, "Music Playlists",
 			    -1);
 	
+	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
 	while (list_iter) {
 		gtk_tree_store_append (tree_store, &tree_iter, &parent_iter);
 		// set playlists data here
 		g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
-		row_value = FALSE;
 		
-		// Get selections from entries
-		row_value = (rb_ipod_prefs_get_entry (priv->prefs, name) || rb_ipod_prefs_get (priv->prefs, SYNC_MUSIC_ALL));
-		
+		// set this row's data
 		gtk_tree_store_set (tree_store, &tree_iter,
-				    0, row_value,
+				    0, rb_ipod_prefs_get_entry (priv->prefs, name),
 				    1, name,
 				    -1);
                 
@@ -1932,7 +1914,7 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 			       &parent_iter,
 			       NULL);
 	gtk_tree_store_set (tree_store, &parent_iter,
-			    0, rb_ipod_prefs_get (priv->prefs, SYNC_PODCASTS_ALL),
+			    0, rb_ipod_prefs_get (priv->prefs, SYNC_PODCASTS),
 			    1, "Podcasts",
 			    -1);
 	
@@ -1946,15 +1928,11 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	while (valid) {
 		RhythmDBEntry *entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), &tree_iter);
 		gtk_tree_store_append (tree_store, &tree_iter2, &parent_iter);
-		// set playlists data here
+		
+		// set up this row
 		name = strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE));
-		row_value = FALSE;
-		
-		// Get selections from entries
-		row_value = (rb_ipod_prefs_get_entry (priv->prefs, name) || rb_ipod_prefs_get (priv->prefs, SYNC_PODCASTS_ALL));
-		
 		gtk_tree_store_set (tree_store, &tree_iter2,
-				    0, row_value,
+				    0, rb_ipod_prefs_get_entry (priv->prefs, name),
 				    1, name,
 				    -1);
 		g_free (name);
@@ -1962,8 +1940,30 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 		valid = gtk_tree_model_iter_next (query_model, &tree_iter);
 	}
 	
+	/* Set up the treeview */
+	
+	/* First column */
+	renderer = gtk_cell_renderer_toggle_new();
+	col = gtk_tree_view_column_new_with_attributes (NULL,
+							renderer,
+							"active", 0,
+							NULL);
+	g_signal_connect (G_OBJECT(renderer),
+			  "toggled", G_CALLBACK (rb_ipod_sync_entries_changed_cb),
+			  entries_changed_data);
+	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
+	
+	/* Second column */
+	renderer = gtk_cell_renderer_text_new();
+	col = gtk_tree_view_column_new_with_attributes (NULL,
+							renderer,
+							"text", 1,
+							NULL);
+	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
 	gtk_tree_view_set_model (GTK_TREE_VIEW(label),
 				 GTK_TREE_MODEL(tree_store));
+	gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(label)),
+				    GTK_SELECTION_NONE);
 	
 	g_strfreev(entries);
 	g_object_unref (shell);
@@ -2032,7 +2032,8 @@ rb_ipod_source_hash_table_insert ( gpointer key,	// RhythmDBEntry *
 {
 	gpointer orig_key;
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (((HashTableInsertionData *)user_data)->ipod_source);
-	GHashTable *hash_table = *(((HashTableInsertionData *)user_data)->hash_table);
+	HashTableInsertionData *data = user_data;
+	GHashTable *hash_table = *(data->hash_table);
 	if ( g_hash_table_lookup_extended ( hash_table, key, &orig_key, NULL) ) {
 		rb_debug ("Hash Table Collision between:\n%s - %s - %s, and\n%s - %s - %s",
 			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),

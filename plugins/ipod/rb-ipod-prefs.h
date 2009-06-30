@@ -73,13 +73,13 @@ void	 rb_ipod_prefs_set		( RBiPodPrefs *prefs,
 					  guint pref_id,
 					  gboolean value );
 void	 rb_ipod_prefs_set_entries	( RBiPodPrefs *prefs,
-					  gchar ** entries,
+					  GList * entries,
 					  gsize length );
 
 gchar *	 rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
-					  gchar * entry );
+					  const gchar * entry );
 void	 rb_ipod_prefs_set_entry	( RBiPodPrefs *prefs,
-					  gchar * entry,
+					  const gchar * entry,
 					  gboolean value );
 
 #endif
