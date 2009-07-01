@@ -1732,7 +1732,7 @@ rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 				    0, value,
 				    -1 );
 		
-		if (g_strcmp0 (name, "Music") == 0) {
+		if (g_strcmp0 (name, "Music Playlists") == 0) {
 			rb_ipod_prefs_set (data->prefs,		// RBiPodPrefs *
 					   SYNC_MUSIC,		// int
 					   value);		// gboolean
@@ -1741,6 +1741,7 @@ rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 					   SYNC_PODCASTS,	// int
 					   value);		// gboolean
 		} else {
+g_print("Setting Entry: %s, %u\n", name, value);
 			rb_ipod_prefs_set_entry (data->prefs,	// RBiPodPrefs *
 						 name,		// gchar * of the entry changed
 						 value);	// gboolean

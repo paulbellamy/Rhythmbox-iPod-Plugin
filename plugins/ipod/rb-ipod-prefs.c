@@ -89,6 +89,22 @@ rb_ipod_prefs_save_file (RBiPodPrefs *prefs, GError **error)
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	gsize length;
 	gchar *data = NULL;
+	
+	/* Set up the entries_array */
+	gchar * entries_array[g_list_length (priv->sync_entries)];
+	int i = 0;
+	GList *iter;
+	for (iter = priv->sync_entries; iter != NULL; iter = iter->next) {
+		entries_array[i] = g_strdup (iter->data);
+		i++;
+	}
+	g_key_file_set_string_list (priv->key_file,
+				    priv->group,
+				    "sync_entries",
+				    (const gchar * const *)entries_array,
+				    g_list_length (priv->sync_entries));
+	
+	/* Save the Keyfile */
 	if ( priv->key_file != NULL) {
 		data = g_key_file_to_data (priv->key_file,
 					   &length,
@@ -103,7 +119,7 @@ rb_ipod_prefs_save_file (RBiPodPrefs *prefs, GError **error)
 				     length,
 				     error);
 		
-		g_free(data);
+		g_free (data);
 		
 		if (error != NULL) {
 			rb_debug ("unable to save iPod properties: %s", (*error)->message);
@@ -247,17 +263,6 @@ rb_ipod_prefs_set_entries (RBiPodPrefs *prefs,
 	g_list_free(priv->sync_entries);
 	priv->sync_entries = entries;
 	
-	gchar * array[length];
-	int i = 0;
-	GList *iter = entries;
-	while (i < length) {
-		array[i] = g_strdup (iter->data);
-		iter = iter->next;
-		i++;
-	}
-	
-	g_key_file_set_string_list (priv->key_file, priv->group, "sync_entries", (const gchar * const *)array, length );
-	
 	rb_ipod_prefs_save_file (prefs, NULL);
 }
 
@@ -288,13 +293,16 @@ rb_ipod_prefs_set_entry ( RBiPodPrefs *prefs,
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
 	if (value) {
-		if (!rb_ipod_prefs_get_entry (prefs, entry)) {
+		if (!rb_ipod_prefs_get_entry (prefs, entry))
 			priv->sync_entries = g_list_append (priv->sync_entries, g_strdup (entry));
-			rb_ipod_prefs_save_file (prefs, NULL);
-		}
 	} else {
-		priv->sync_entries = g_list_remove (priv->sync_entries, entry);
-		rb_ipod_prefs_save_file (prefs, NULL);
+		GList *iter;
+		for (iter = priv->sync_entries; iter != NULL; iter = iter->next) {
+			if (g_strcmp0 (iter->data, entry) == 0)
+				priv->sync_entries = g_list_remove (priv->sync_entries, iter->data);
+		}
 	}
+	
+	rb_ipod_prefs_save_file (prefs, NULL);
 }
 
