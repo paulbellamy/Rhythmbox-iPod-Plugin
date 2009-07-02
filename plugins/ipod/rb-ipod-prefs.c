@@ -37,12 +37,20 @@ typedef struct {
 	GKeyFile *key_file;
 	gchar *group;
 	
+	/* loaded/saved to file */
 	gboolean sync_auto;
 	gboolean sync_music;
 	gboolean sync_music_all;
 	gboolean sync_podcasts;
 	gboolean sync_podcasts_all;
-	GList *  sync_entries;
+	GList *  sync_playlists_list;
+	GList *  sync_podcasts_list;
+	
+	/* generated on load */
+	GList *  sync_to_add;
+	GList *  sync_to_remove;
+	gint	 sync_space_needed;
+	
 } RBiPodPrefsPrivate;
 
 G_DEFINE_TYPE (RBiPodPrefs, rb_ipod_prefs, G_TYPE_OBJECT)
@@ -64,9 +72,17 @@ rb_ipod_prefs_dispose (GObject *object)
 	if (priv->group != NULL)
 		g_free( priv->group );
 
-	if (priv->sync_entries != NULL)
-		g_list_free( priv->sync_entries );
+	if (priv->sync_playlists_list != NULL)
+		g_list_free( priv->sync_playlists_list );
 	
+	if (priv->sync_playlists_list != NULL)
+		g_list_free( priv->sync_podcasts_list );
+	
+	if (priv->sync_playlists_list != NULL)
+		g_list_free( priv->sync_to_add );
+	
+	if (priv->sync_playlists_list != NULL)
+		g_list_free( priv->sync_to_remove );
 	
 	G_OBJECT_CLASS (rb_ipod_prefs_parent_class)->dispose (object);
 }
@@ -81,6 +97,43 @@ rb_ipod_prefs_class_init (RBiPodPrefsClass *klass)
 	g_type_class_add_private (klass, sizeof (RBiPodPrefsPrivate));
 }
 
+static gchar **
+g_list_to_string_list (GList * list)
+{
+	GList *list_iter = list;
+	gchar ** strv = g_new0 (gchar *, g_list_length (list));
+	int i=0;
+	
+	while (list_iter != NULL)
+	{
+		strv[i++] = g_strdup(list_iter->data);
+		list_iter = list_iter->next;
+	}
+	
+	return strv;
+}
+
+static GList *
+string_list_to_g_list (const gchar * const * strv)
+{
+	const gchar ** strv_iter = (const gchar **) strv;
+	GList *list = NULL;
+	
+	while (*strv_iter != NULL) {
+		list = g_list_append (list, g_strdup (*strv_iter));
+		strv_iter++;
+	}
+	
+	return list;
+}
+
+void
+rb_ipod_prefs_update_sync ( RBiPodPrefs *prefs )
+{
+	/* FIXME: Stub.  Needs to build the to_add and to_remove lists, and calculate the space needed. */
+	//RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+}
+
 gboolean
 rb_ipod_prefs_save_file (RBiPodPrefs *prefs, GError **error)
 {
@@ -89,20 +142,6 @@ rb_ipod_prefs_save_file (RBiPodPrefs *prefs, GError **error)
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	gsize length;
 	gchar *data = NULL;
-	
-	/* Set up the entries_array */
-	gchar * entries_array[g_list_length (priv->sync_entries)];
-	int i = 0;
-	GList *iter;
-	for (iter = priv->sync_entries; iter != NULL; iter = iter->next) {
-		entries_array[i] = g_strdup (iter->data);
-		i++;
-	}
-	g_key_file_set_string_list (priv->key_file,
-				    priv->group,
-				    "sync_entries",
-				    (const gchar * const *)entries_array,
-				    g_list_length (priv->sync_entries));
 	
 	/* Save the Keyfile */
 	if ( priv->key_file != NULL) {
@@ -181,7 +220,9 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", FALSE);
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", FALSE);
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", FALSE);
-		g_key_file_set_string_list (priv->key_file, priv->group, "sync_entries", (const gchar * const *) "", 0);
+		g_key_file_set_string_list (priv->key_file, priv->group, "sync_playlists_list", (const gchar * const *) "", 0);
+		g_key_file_set_string_list (priv->key_file, priv->group, "sync_podcasts_list", (const gchar * const *) "", 0);
+		
 	}
 	
 	// Load initial values from the file
@@ -191,18 +232,21 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	priv->sync_podcasts = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts", NULL);
 	priv->sync_podcasts_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts_all", NULL);
 	
-	gchar ** entries = g_key_file_get_string_list (priv->key_file, priv->group, "sync_entries", NULL, NULL);
-	while (*entries != NULL) {
-		priv->sync_entries = g_list_append (priv->sync_entries, *entries);
-		entries++;
-	}
-	
+	priv->sync_playlists_list = string_list_to_g_list ( (const gchar * const *) g_key_file_get_string_list (priv->key_file, priv->group,
+											"sync_playlists_list",
+											NULL,
+											NULL) );
+	priv->sync_podcasts_list = string_list_to_g_list ( (const gchar * const *) g_key_file_get_string_list (priv->key_file, priv->group,
+											"sync_podcasts_list",
+											NULL,
+											NULL) );
+
+	rb_ipod_prefs_update_sync (prefs);
      	return prefs;
 }
-
 gboolean
-rb_ipod_prefs_get ( RBiPodPrefs *prefs,
-		    guint pref_id )
+rb_ipod_prefs_get_boolean ( RBiPodPrefs *prefs,
+			    guint pref_id )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
@@ -212,22 +256,31 @@ rb_ipod_prefs_get ( RBiPodPrefs *prefs,
 		case SYNC_MUSIC_ALL:	return priv->sync_music_all;
 		case SYNC_PODCASTS:	return priv->sync_podcasts;
 		case SYNC_PODCASTS_ALL:	return priv->sync_podcasts_all;
-		default:		return FALSE;
+		default:		g_assert_not_reached();
 	}
 }
 
-const gchar **
-rb_ipod_prefs_get_entries (RBiPodPrefs *prefs)
+gchar **
+rb_ipod_prefs_get_string_list ( RBiPodPrefs *prefs,
+				guint prop_id)
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	return (const gchar **) priv->sync_entries;
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			return g_list_to_string_list (priv->sync_playlists_list);
+		case SYNC_PODCASTS_LIST:
+			return g_list_to_string_list (priv->sync_podcasts_list);
+		default:
+			g_assert_not_reached();
+			return NULL;
+	}
 }
 
 void
-rb_ipod_prefs_set ( RBiPodPrefs *prefs,
-		    guint pref_id,
-		    gboolean value )
+rb_ipod_prefs_set_boolean ( RBiPodPrefs *prefs,
+			    guint pref_id,
+			    gboolean value )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
@@ -250,36 +303,101 @@ rb_ipod_prefs_set ( RBiPodPrefs *prefs,
 		default:		break;
 	}
 	
+	rb_ipod_prefs_update_sync (prefs);
 	rb_ipod_prefs_save_file (prefs, NULL);
 }
 
 void
-rb_ipod_prefs_set_entries (RBiPodPrefs *prefs,
-			   GList * entries,
-			   gsize length )
+rb_ipod_prefs_set_list ( RBiPodPrefs *prefs,
+			 guint prop_id,
+			 GList * list )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	g_list_free(priv->sync_entries);
-	priv->sync_entries = entries;
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			g_list_free(priv->sync_playlists_list);
+			priv->sync_playlists_list = list;
+			g_key_file_set_string_list (priv->key_file,
+						    priv->group,
+						    "sync_playlists_list",
+						    (const gchar **) g_list_to_string_list (list),
+						    g_list_length (list));
+			rb_ipod_prefs_update_sync (prefs);
+			rb_ipod_prefs_save_file (prefs, NULL);
+			break;
+		case SYNC_PODCASTS_LIST:
+			g_list_free(priv->sync_podcasts_list);
+			priv->sync_podcasts_list = list;
+			g_key_file_set_string_list (priv->key_file,
+						    priv->group,
+						    "sync_podcasts_list",
+						    (const gchar **) g_list_to_string_list (list),
+						    g_list_length (list));
+			rb_ipod_prefs_update_sync (prefs);
+			rb_ipod_prefs_save_file (prefs, NULL);
+			break;
+		case SYNC_TO_ADD:
+			g_list_free(priv->sync_to_add);
+			priv->sync_to_add = list;
+			break;
+		case SYNC_TO_REMOVE:
+			g_list_free(priv->sync_to_remove);
+			priv->sync_to_remove = list;
+			break;
+		default:
+			g_assert_not_reached();
+			return;
+	}
+}
+
+
+GList *
+rb_ipod_prefs_get_list ( RBiPodPrefs *prefs,
+			 guint prop_id )
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	rb_ipod_prefs_save_file (prefs, NULL);
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			return priv->sync_playlists_list;
+		case SYNC_PODCASTS_LIST:
+			return priv->sync_podcasts_list;
+		case SYNC_TO_ADD:
+			return priv->sync_to_add;
+		case SYNC_TO_REMOVE:
+			return priv->sync_to_remove;
+		default:
+			g_assert_not_reached();
+			return NULL;
+	}
 }
 
 gchar *
 rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
+			  guint prop_id,
 			  const gchar * entry )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
 	GList * iter;
 	
-	for (iter = priv->sync_entries;
-	     iter != NULL;
-	     iter = iter->next)
-	{
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			iter = priv->sync_playlists_list;
+			break;
+		case SYNC_PODCASTS_LIST:
+			iter = priv->sync_podcasts_list;
+			break;
+		default:
+			g_assert_not_reached();
+			return NULL;
+	}
+	
+	while (iter != NULL) {
 		if (g_strcmp0 (iter->data, entry) == 0)
 			return iter->data;
+		iter  = iter->next;
 	}
 	
 	return NULL;
@@ -287,22 +405,71 @@ rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
 
 void
 rb_ipod_prefs_set_entry ( RBiPodPrefs *prefs,
+			  guint prop_id,
 			  const gchar * entry,
 			  gboolean value )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
+	GList **list;
+	
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			list = &priv->sync_playlists_list;
+			break;
+		case SYNC_PODCASTS_LIST:
+			list = &priv->sync_podcasts_list;
+			break;
+		default:
+			g_assert_not_reached();
+			return;
+	}
+	
 	if (value) {
-		if (!rb_ipod_prefs_get_entry (prefs, entry))
-			priv->sync_entries = g_list_append (priv->sync_entries, g_strdup (entry));
+		if (!rb_ipod_prefs_get_entry (prefs, prop_id, entry))
+			*list = g_list_append (*list, g_strdup (entry));
 	} else {
-		GList *iter;
-		for (iter = priv->sync_entries; iter != NULL; iter = iter->next) {
+		GList *iter = *list;
+		while (iter != NULL) {
 			if (g_strcmp0 (iter->data, entry) == 0)
-				priv->sync_entries = g_list_remove (priv->sync_entries, iter->data);
+				*list = g_list_remove (*list, iter->data);
+			iter = iter->next;
 		}
 	}
 	
+	rb_ipod_prefs_update_sync (prefs);
 	rb_ipod_prefs_save_file (prefs, NULL);
+}
+				  
+gint
+rb_ipod_prefs_get_int ( RBiPodPrefs *prefs,
+			guint prop_id )
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	
+	switch (prop_id) {
+		case SYNC_SPACE_NEEDED:
+			return priv->sync_space_needed;
+		default:
+			g_assert_not_reached();
+			return 0;
+	}
+}
+
+void
+rb_ipod_prefs_set_int ( RBiPodPrefs *prefs,
+			guint prop_id,
+			gint value )
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	
+	switch (prop_id) {
+		case SYNC_SPACE_NEEDED:
+			priv->sync_space_needed = value;
+			break;
+		default:
+			g_assert_not_reached();
+			break;
+	}
 }
 

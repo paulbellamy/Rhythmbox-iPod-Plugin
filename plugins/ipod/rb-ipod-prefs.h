@@ -47,7 +47,12 @@ enum {
 	SYNC_MUSIC,
 	SYNC_MUSIC_ALL,
 	SYNC_PODCASTS,
-	SYNC_PODCASTS_ALL
+	SYNC_PODCASTS_ALL,
+	SYNC_PLAYLISTS_LIST,
+	SYNC_PODCASTS_LIST,
+	SYNC_TO_ADD,
+	SYNC_TO_REMOVE,
+	SYNC_SPACE_NEEDED
 };
 
 typedef struct 
@@ -64,22 +69,34 @@ typedef struct
 RBiPodPrefs *rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source );
 GType rb_ipod_prefs_get_type (void);
 
+
+void	 rb_ipod_prefs_update_sync	( RBiPodPrefs *prefs );
+
 gboolean rb_ipod_prefs_save_file	( RBiPodPrefs *prefs,
 					  GError **error );
-gboolean rb_ipod_prefs_get		( RBiPodPrefs *prefs,
+gboolean rb_ipod_prefs_get_boolean	( RBiPodPrefs *prefs,
 					  guint pref_id );
-const gchar ** rb_ipod_prefs_get_entries	( RBiPodPrefs *prefs );
-void	 rb_ipod_prefs_set		( RBiPodPrefs *prefs,
+void	 rb_ipod_prefs_set_boolean	( RBiPodPrefs *prefs,
 					  guint pref_id,
 					  gboolean value );
-void	 rb_ipod_prefs_set_entries	( RBiPodPrefs *prefs,
-					  GList * entries,
-					  gsize length );
-
+gchar ** rb_ipod_prefs_get_string_list	( RBiPodPrefs *prefs,
+					  guint prop_id );
+void	 rb_ipod_prefs_set_list		( RBiPodPrefs *prefs,
+					  guint prop_id,
+					  GList * list );
+GList *  rb_ipod_prefs_get_list		( RBiPodPrefs *prefs,
+					  guint prop_id );
 gchar *	 rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
+					  guint prop_id,
 					  const gchar * entry );
 void	 rb_ipod_prefs_set_entry	( RBiPodPrefs *prefs,
+					  guint prop_id,
 					  const gchar * entry,
 					  gboolean value );
+gint	 rb_ipod_prefs_get_int		( RBiPodPrefs *prefs,
+					  guint prop_id );
+void	 rb_ipod_prefs_set_int		( RBiPodPrefs *prefs,
+					  guint prop_id,
+					  gint value );
 
 #endif
