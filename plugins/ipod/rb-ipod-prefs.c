@@ -32,10 +32,19 @@
 #include "rb-ipod-helpers.h"
 #include "rb-ipod-db.h"
 #include "rb-debug.h"
+#include "rb-playlist-source.h"
+#include "rb-playlist-manager.h"
+#include "rb-podcast-manager.h"
 
 typedef struct {
 	GKeyFile *key_file;
 	gchar *group;
+	
+	/* Pointers to stuff for setting up the sync */
+	RBShell *shell;
+	RhythmDB *library_db;
+	RhythmDB *ipod_db;
+	
 	
 	/* loaded/saved to file */
 	gboolean sync_auto;
@@ -43,10 +52,10 @@ typedef struct {
 	gboolean sync_music_all;
 	gboolean sync_podcasts;
 	gboolean sync_podcasts_all;
-	GList *  sync_playlists_list;
-	GList *  sync_podcasts_list;
+	GHashTable * sync_playlists_list;
+	GHashTable * sync_podcasts_list;
 	
-	/* generated on load */
+	/* generated on load and rb_ipod_prefs_sync_update */
 	GList *  sync_to_add;
 	GList *  sync_to_remove;
 	gint	 sync_space_needed;
@@ -73,16 +82,25 @@ rb_ipod_prefs_dispose (GObject *object)
 		g_free( priv->group );
 
 	if (priv->sync_playlists_list != NULL)
-		g_list_free( priv->sync_playlists_list );
+		g_hash_table_unref ( priv->sync_playlists_list );
 	
-	if (priv->sync_playlists_list != NULL)
-		g_list_free( priv->sync_podcasts_list );
+	if (priv->sync_podcasts_list != NULL)
+		g_hash_table_unref ( priv->sync_podcasts_list );
 	
-	if (priv->sync_playlists_list != NULL)
+	if (priv->sync_to_add != NULL)
 		g_list_free( priv->sync_to_add );
 	
-	if (priv->sync_playlists_list != NULL)
+	if (priv->sync_to_remove != NULL)
 		g_list_free( priv->sync_to_remove );
+	
+	if (priv->shell != NULL)
+		g_object_unref (priv->shell);
+		
+	if (priv->library_db != NULL)
+		g_object_unref (priv->library_db);
+		
+	if (priv->ipod_db != NULL)
+		g_object_unref (priv->ipod_db);
 	
 	G_OBJECT_CLASS (rb_ipod_prefs_parent_class)->dispose (object);
 }
@@ -98,40 +116,284 @@ rb_ipod_prefs_class_init (RBiPodPrefsClass *klass)
 }
 
 static gchar **
-g_list_to_string_list (GList * list)
+hash_table_to_string_list (GHashTable * hash_table)
 {
-	GList *list_iter = list;
-	gchar ** strv = g_new0 (gchar *, g_list_length (list));
-	int i=0;
+	gchar ** strv = g_new0 (gchar *, g_hash_table_size (hash_table) + 1 );
+	gchar ** strv_iter;
+	GHashTableIter hash_iter;
+	gpointer key, value;
 	
-	while (list_iter != NULL)
-	{
-		strv[i++] = g_strdup(list_iter->data);
-		list_iter = list_iter->next;
+	strv_iter = strv;
+	g_hash_table_iter_init (&hash_iter, hash_table);
+	while (g_hash_table_iter_next (&hash_iter, &key, &value)) {
+		*strv_iter = g_strdup((const gchar *)key);
+		strv_iter++;
 	}
 	
 	return strv;
 }
 
-static GList *
-string_list_to_g_list (const gchar * const * strv)
+static GHashTable *
+string_list_to_hash_table (const gchar ** string_list)
 {
-	const gchar ** strv_iter = (const gchar **) strv;
-	GList *list = NULL;
+	const gchar ** iter;
+	GHashTable *hash_table = g_hash_table_new (g_str_hash, g_str_equal);
 	
-	while (*strv_iter != NULL) {
-		list = g_list_append (list, g_strdup (*strv_iter));
-		strv_iter++;
+	if (string_list != NULL) {
+		for (iter = (const gchar **) string_list;
+		     *iter != NULL;
+		     iter++)
+		{
+			g_hash_table_insert (hash_table, g_strdup (*iter), g_strdup (*iter));
+		}
 	}
 	
-	return list;
+	return hash_table;
+}
+
+typedef struct {
+	GHashTable *other_hash_table;
+	GList **list;
+} HashTableComparisonData;
+
+static void
+rb_ipod_prefs_hash_table_compare (gpointer key,		// RhythmDBEntry *
+				  gpointer value,	// Whatever
+				  gpointer user_data)	// HashTableComparisonData *
+{
+	HashTableComparisonData *data = user_data;
+	
+	if ( !g_hash_table_lookup (data->other_hash_table, key) ) {
+		*(data->list) = g_list_append ( *(data->list), key );
+	}
+}
+
+typedef struct {
+	RBiPodPrefs *ipod_prefs;
+	GHashTable **hash_table;
+} HashTableInsertionData;
+
+static void
+rb_ipod_prefs_hash_table_insert ( gpointer key,		// RhythmDBEntry *
+				  gpointer value,	// Whatever
+				  gpointer user_data )	// HashTableInsertionData *
+{
+	gpointer orig_key;
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (((HashTableInsertionData *)user_data)->ipod_prefs);
+	HashTableInsertionData *data = user_data;
+	GHashTable *hash_table = *(data->hash_table);
+	if ( g_hash_table_lookup_extended ( hash_table, key, &orig_key, NULL) ) {
+		rb_debug ("Hash Table Collision between:\n%s - %s - %s, and\n%s - %s - %s",
+			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
+			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
+			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ALBUM),
+			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_TITLE),
+			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ARTIST),
+			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
+		return;
+	}
+	
+	RhythmDBEntryType entry_type = rhythmdb_entry_get_entry_type(key);
+	if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG && !priv->sync_music)
+		return;
+	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST
+	    || entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_FEED)
+	{
+		if (!priv->sync_podcasts)
+			return;
+	}
+	if (!rb_podcast_manager_entry_downloaded (key))
+		return;
+		
+	//g_print("entry_type->name: %s\n", entry_type->name); // DEBUGGING
+		
+	g_hash_table_insert ( hash_table,
+			      key,
+			      g_strdup ( rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) ) );
+}
+
+static gboolean
+rb_ipod_prefs_tree_view_insert (GtkTreeModel *query_model,
+				  GtkTreePath  *path,
+				  GtkTreeIter  *iter,
+				  HashTableInsertionData *insertion_data)
+{
+	RhythmDBEntry *entry;
+	
+	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
+	
+	rb_ipod_prefs_hash_table_insert (entry, NULL, insertion_data);
+	
+	return FALSE;
+}
+
+static gint
+rb_ipod_prefs_calculate_space_needed (RBiPodPrefs *prefs)
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	GList * list_iter;
+	
+	priv->sync_space_needed = 0;
+	
+	for (list_iter = priv->sync_to_add; list_iter; list_iter = list_iter->next) {		
+		priv->sync_space_needed += (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
+										RHYTHMDB_PROP_FILE_SIZE );
+	}
+	
+	for (list_iter = priv->sync_to_remove; list_iter; list_iter = list_iter->next) {		
+		priv->sync_space_needed -= (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
+										RHYTHMDB_PROP_FILE_SIZE );
+	}
+	
+	// DEBUGGING
+	g_print("Space Needed: %.2lf MB\n", (long int) (priv->sync_space_needed) / 1000000.0 );
+	
+	return priv->sync_space_needed;
+}
+
+static void
+hash_table_insert_all (RBiPodPrefs *prefs,
+		       RhythmDB *db,
+		       GHashTable *hash,
+		       RhythmDBEntryType type)
+{
+	HashTableInsertionData insertion_data = { prefs, &hash };
+	GtkTreeModel *query_model;
+	
+	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
+		rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (query_model),
+					RHYTHMDB_QUERY_PROP_EQUALS,
+					RHYTHMDB_PROP_TYPE, type,
+					RHYTHMDB_QUERY_END);
+		gtk_tree_model_foreach (query_model,
+					(GtkTreeModelForeachFunc) rb_ipod_prefs_tree_view_insert,
+					&insertion_data);
+}
+
+static void
+hash_table_insert_some (RBiPodPrefs *prefs,
+			RhythmDB *db,
+			GHashTable *hash,
+			guint list,
+			GList *playlists )
+{
+	const gchar **iter;
+	gchar *name;
+	GList *list_iter = playlists;
+	GtkTreeModel *query_model;
+	HashTableInsertionData insertion_data = { prefs, &hash };
+	
+	for ( iter = (const gchar **) rb_ipod_prefs_get_string_list ( prefs, list );
+	      *iter != NULL;
+	      iter++ )
+	{
+		// get playlist with ( g_strcmp(name, iter) == 0 )
+		for (list_iter = playlists;
+		     list_iter;
+		     list_iter = list_iter->next )
+		{
+			// This gripes about something being uninstantiable
+			g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
+			
+			if ( g_strcmp0 ( name, *iter ) == 0 ) {
+				rhythmdb_entry_get_entry_type (list_iter->data);
+				
+				// Get it's entries, and add them to the itinerary_sync_hash
+				query_model = GTK_TREE_MODEL (rb_playlist_source_get_query_model (list_iter->data));
+				
+				gtk_tree_model_foreach (query_model,
+							(GtkTreeModelForeachFunc) rb_ipod_prefs_tree_view_insert,
+							&insertion_data);
+				
+				break;
+			}
+		}
+	}
 }
 
 void
 rb_ipod_prefs_update_sync ( RBiPodPrefs *prefs )
 {
-	/* FIXME: Stub.  Needs to build the to_add and to_remove lists, and calculate the space needed. */
-	//RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	GHashTable *itinerary_hash = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTable *ipod_hash = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GList	*to_add = NULL; // Files to go onto the iPod
+	GList	*to_remove = NULL; // Files to be removed from the iPod
+	GList	*playlists = NULL;
+	HashTableComparisonData comparison_data;
+	
+	/* Build itinerary_hash */
+	playlists = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (priv->shell) );
+	if (priv->sync_music) {
+		if (priv->sync_music_all) {
+			// Syncing all songs
+			hash_table_insert_all (prefs,
+					       priv->library_db,
+					       itinerary_hash,
+					       RHYTHMDB_ENTRY_TYPE_SONG);
+		} else {
+			// Only syncing some songs
+			hash_table_insert_some (prefs,
+						priv->library_db,
+						itinerary_hash,
+						SYNC_PLAYLISTS_LIST,
+						playlists );
+		}
+	}
+	
+	if (priv->sync_podcasts) {
+		if (priv->sync_podcasts_all) {
+			// Syncing all podcasts
+			hash_table_insert_all (prefs,
+					       priv->library_db,
+					       itinerary_hash,
+					       RHYTHMDB_ENTRY_TYPE_PODCAST_POST);
+		} else {
+			// Only syncing some podcasts
+			hash_table_insert_some (prefs,
+						priv->library_db,
+						itinerary_hash,
+						SYNC_PODCASTS_LIST,
+						playlists);
+		}
+	}
+	
+	g_list_free (playlists);
+	
+	/* Build ipod_hash */
+	if (priv->sync_music)
+		hash_table_insert_all (prefs,
+				       priv->ipod_db,
+				       ipod_hash,
+				       RHYTHMDB_ENTRY_TYPE_SONG);
+	if (priv->sync_podcasts)
+		hash_table_insert_all (prefs,
+				       priv->ipod_db,
+				       ipod_hash,
+				       RHYTHMDB_ENTRY_TYPE_PODCAST_POST);
+	
+	/* Build Addition List */
+	comparison_data.other_hash_table = ipod_hash;
+	comparison_data.list = &to_add;
+	g_hash_table_foreach (itinerary_hash,
+			      rb_ipod_prefs_hash_table_compare, // function to add to add list if necessary
+			      &comparison_data );
+	rb_ipod_prefs_set_list(prefs, SYNC_TO_ADD, to_add);
+	
+	/* Build Removal List */
+	comparison_data.other_hash_table = itinerary_hash;
+	comparison_data.list = &to_remove;
+	g_hash_table_foreach (ipod_hash,
+			      rb_ipod_prefs_hash_table_compare, // function to add to remove list if necessary
+			      &comparison_data );
+	rb_ipod_prefs_set_list(prefs, SYNC_TO_REMOVE, to_remove);
+	
+	// Empty the hash tables
+	g_hash_table_unref (itinerary_hash);
+	g_hash_table_unref (ipod_hash);
+	
+	/* Calculate how much space we need */
+	rb_ipod_prefs_calculate_space_needed (prefs);
 }
 
 gboolean
@@ -191,12 +453,22 @@ rb_ipod_prefs_load_file (RBiPodPrefs *prefs, GError **error)
 RBiPodPrefs *
 rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 {
+	g_return_val_if_fail (source != NULL, NULL);
+
 	RBiPodPrefs *prefs = g_object_new (RB_TYPE_IPOD_PREFS, NULL);
+	
+	
+	g_return_val_if_fail (prefs != NULL, NULL);
+	
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	GError *error = NULL;
 	GMount *mount;
 	
-	g_return_val_if_fail (source != NULL, NULL);
+	g_object_get (source, "shell", &priv->shell, NULL);
+	g_object_get (priv->shell, "db", &priv->library_db, NULL);
+	// FIXME: How to get the ipod_db?? from the RBiPodSource
+//	ipod_db = get_db_for_source (RB_IPOD_SOURCE (source));
+	priv->ipod_db = NULL;
 	
 	// Load the key_file if it isn't already
 	priv->key_file = (key_file == NULL ? rb_ipod_prefs_load_file(prefs, &error) : key_file);
@@ -232,16 +504,17 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	priv->sync_podcasts = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts", NULL);
 	priv->sync_podcasts_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts_all", NULL);
 	
-	priv->sync_playlists_list = string_list_to_g_list ( (const gchar * const *) g_key_file_get_string_list (priv->key_file, priv->group,
-											"sync_playlists_list",
-											NULL,
-											NULL) );
-	priv->sync_podcasts_list = string_list_to_g_list ( (const gchar * const *) g_key_file_get_string_list (priv->key_file, priv->group,
-											"sync_podcasts_list",
-											NULL,
-											NULL) );
+	priv->sync_playlists_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
+											    "sync_playlists_list",
+											    NULL,
+											    NULL) );
+	priv->sync_podcasts_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
+											   "sync_podcasts_list",
+											   NULL,
+											   NULL) );
 
 	rb_ipod_prefs_update_sync (prefs);
+
      	return prefs;
 }
 gboolean
@@ -268,9 +541,9 @@ rb_ipod_prefs_get_string_list ( RBiPodPrefs *prefs,
 	
 	switch (prop_id) {
 		case SYNC_PLAYLISTS_LIST:
-			return g_list_to_string_list (priv->sync_playlists_list);
+			return hash_table_to_string_list (priv->sync_playlists_list);
 		case SYNC_PODCASTS_LIST:
-			return g_list_to_string_list (priv->sync_podcasts_list);
+			return hash_table_to_string_list (priv->sync_podcasts_list);
 		default:
 			g_assert_not_reached();
 			return NULL;
@@ -315,28 +588,6 @@ rb_ipod_prefs_set_list ( RBiPodPrefs *prefs,
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
 	switch (prop_id) {
-		case SYNC_PLAYLISTS_LIST:
-			g_list_free(priv->sync_playlists_list);
-			priv->sync_playlists_list = list;
-			g_key_file_set_string_list (priv->key_file,
-						    priv->group,
-						    "sync_playlists_list",
-						    (const gchar **) g_list_to_string_list (list),
-						    g_list_length (list));
-			rb_ipod_prefs_update_sync (prefs);
-			rb_ipod_prefs_save_file (prefs, NULL);
-			break;
-		case SYNC_PODCASTS_LIST:
-			g_list_free(priv->sync_podcasts_list);
-			priv->sync_podcasts_list = list;
-			g_key_file_set_string_list (priv->key_file,
-						    priv->group,
-						    "sync_podcasts_list",
-						    (const gchar **) g_list_to_string_list (list),
-						    g_list_length (list));
-			rb_ipod_prefs_update_sync (prefs);
-			rb_ipod_prefs_save_file (prefs, NULL);
-			break;
 		case SYNC_TO_ADD:
 			g_list_free(priv->sync_to_add);
 			priv->sync_to_add = list;
@@ -359,10 +610,6 @@ rb_ipod_prefs_get_list ( RBiPodPrefs *prefs,
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
 	switch (prop_id) {
-		case SYNC_PLAYLISTS_LIST:
-			return priv->sync_playlists_list;
-		case SYNC_PODCASTS_LIST:
-			return priv->sync_podcasts_list;
 		case SYNC_TO_ADD:
 			return priv->sync_to_add;
 		case SYNC_TO_REMOVE:
@@ -380,27 +627,15 @@ rb_ipod_prefs_get_entry	( RBiPodPrefs *prefs,
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	GList * iter;
-	
 	switch (prop_id) {
 		case SYNC_PLAYLISTS_LIST:
-			iter = priv->sync_playlists_list;
-			break;
+			return g_hash_table_lookup (priv->sync_playlists_list, entry);
 		case SYNC_PODCASTS_LIST:
-			iter = priv->sync_podcasts_list;
-			break;
+			return g_hash_table_lookup (priv->sync_podcasts_list, entry);
 		default:
 			g_assert_not_reached();
 			return NULL;
 	}
-	
-	while (iter != NULL) {
-		if (g_strcmp0 (iter->data, entry) == 0)
-			return iter->data;
-		iter  = iter->next;
-	}
-	
-	return NULL;
 }
 
 void
@@ -411,14 +646,14 @@ rb_ipod_prefs_set_entry ( RBiPodPrefs *prefs,
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
-	GList **list;
+	GHashTable *hash_table;
 	
 	switch (prop_id) {
 		case SYNC_PLAYLISTS_LIST:
-			list = &priv->sync_playlists_list;
+			hash_table = priv->sync_playlists_list;
 			break;
 		case SYNC_PODCASTS_LIST:
-			list = &priv->sync_podcasts_list;
+			hash_table = priv->sync_podcasts_list;
 			break;
 		default:
 			g_assert_not_reached();
@@ -427,14 +662,28 @@ rb_ipod_prefs_set_entry ( RBiPodPrefs *prefs,
 	
 	if (value) {
 		if (!rb_ipod_prefs_get_entry (prefs, prop_id, entry))
-			*list = g_list_append (*list, g_strdup (entry));
+			g_hash_table_insert (hash_table, g_strdup (entry), g_strdup (entry));
 	} else {
-		GList *iter = *list;
-		while (iter != NULL) {
-			if (g_strcmp0 (iter->data, entry) == 0)
-				*list = g_list_remove (*list, iter->data);
-			iter = iter->next;
-		}
+		g_hash_table_remove (hash_table, entry);
+	}
+	
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			g_key_file_set_string_list (priv->key_file, priv->group,
+						    "sync_playlists_list",
+						    (const gchar * const *) rb_ipod_prefs_get_string_list (prefs, SYNC_PLAYLISTS_LIST),
+						    g_hash_table_size (priv->sync_playlists_list) );
+			
+			break;
+		case SYNC_PODCASTS_LIST:	
+			g_key_file_set_string_list (priv->key_file, priv->group,
+						    "sync_podcasts_list",
+						    (const gchar * const *) rb_ipod_prefs_get_string_list (prefs, SYNC_PODCASTS_LIST),
+						    g_hash_table_size (priv->sync_podcasts_list) );
+			break;
+		default:
+			g_assert_not_reached();
+			return;
 	}
 	
 	rb_ipod_prefs_update_sync (prefs);
