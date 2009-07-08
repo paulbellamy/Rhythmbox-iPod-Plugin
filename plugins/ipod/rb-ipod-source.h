@@ -82,6 +82,8 @@ void			rb_ipod_source_add_entries	(RBiPodSource *source,
 void			rb_ipod_source_trash_entries	(RBiPodSource *source,
 							 GList *entries);
 
+RhythmDB *		rb_ipod_source_get_db		(RBiPodSource *source);
+
 G_END_DECLS
 
 #endif /* __RB_IPOD_SOURCE_H */

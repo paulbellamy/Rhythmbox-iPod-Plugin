@@ -201,9 +201,9 @@ rb_ipod_prefs_hash_table_insert ( gpointer key,		// RhythmDBEntry *
 	{
 		if (!priv->sync_podcasts)
 			return;
+		if (!rb_podcast_manager_entry_downloaded (key))
+			return;
 	}
-	if (!rb_podcast_manager_entry_downloaded (key))
-		return;
 		
 	//g_print("entry_type->name: %s\n", entry_type->name); // DEBUGGING
 		
@@ -466,9 +466,7 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	
 	g_object_get (source, "shell", &priv->shell, NULL);
 	g_object_get (priv->shell, "db", &priv->library_db, NULL);
-	// FIXME: How to get the ipod_db?? from the RBiPodSource
-//	ipod_db = get_db_for_source (RB_IPOD_SOURCE (source));
-	priv->ipod_db = NULL;
+	priv->ipod_db = rb_ipod_source_get_db (RB_IPOD_SOURCE (source));
 	
 	// Load the key_file if it isn't already
 	priv->key_file = (key_file == NULL ? rb_ipod_prefs_load_file(prefs, &error) : key_file);

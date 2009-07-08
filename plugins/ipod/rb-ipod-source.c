@@ -1937,6 +1937,12 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	g_object_unref (builder);
 }
 
+RhythmDB *
+rb_ipod_source_get_db (RBiPodSource *source)
+{
+	return get_db_for_source (source);
+}
+
 void
 rb_ipod_source_sync (RBiPodSource *ipod_source)
 {
@@ -1946,9 +1952,15 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	 RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
 	
 	// Check we have enough space, on the iPod.
-	if (rb_ipod_prefs_get_int (priv->prefs, SYNC_SPACE_NEEDED) > rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db))) {
+	if (rb_ipod_prefs_get_int (priv->prefs, SYNC_SPACE_NEEDED) > (gint64) (rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db)))) {
 		//Not enough Space on Device throw up an error
+		g_print("Not enough Free Space.\n");
+		return;
 	}
+	
+	rb_ipod_prefs_update_sync (priv->prefs);
+	
+	/*
 	
 	// Remove tracks and podcasts on iPod, but not in itinerary
 	rb_ipod_source_trash_entries ( ipod_source, rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
@@ -1961,5 +1973,31 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	
 	// Done with this list, clear it.
 	rb_ipod_prefs_set_list(priv->prefs, SYNC_TO_ADD, NULL);
+	
+	*/
+	
+	// DEBUGGING - Print the lists
+	GList *iter;
+	g_print("To Add:\n");
+	for (iter = rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_ADD);
+	     iter;
+	     iter = iter->next)
+	{
+		g_print("%15s - %15s - %15s\n",
+			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_TITLE),
+			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ARTIST),
+			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ALBUM));
+	}
+	
+	g_print("To Remove:\n");
+	for (iter = rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_REMOVE);
+	     iter;
+	     iter = iter->next)
+	{
+		g_print("%15s - %15s - %15s\n",
+			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_TITLE),
+			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ARTIST),
+			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ALBUM));
+	}
 }
 
