@@ -1937,10 +1937,38 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	g_object_unref (builder);
 }
 
-RhythmDB *
-rb_ipod_source_get_db (RBiPodSource *source)
+GHashTable *
+rb_ipod_source_get_podcasts	(RBiPodSource *source)
 {
-	return get_db_for_source (source);
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	GHashTable *result = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTableIter iter;
+	gpointer key, value;
+	
+	g_hash_table_iter_init (&iter, priv->entry_map);
+	while (g_hash_table_iter_next (&iter, &key, &value)) {
+		if (((Itdb_Track *)value)->mediatype == MEDIATYPE_PODCAST)
+			g_hash_table_insert (result, key, key);
+	}
+	
+	return result;
+}
+
+GHashTable *
+rb_ipod_source_get_entries	(RBiPodSource *source)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	GHashTable *result = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTableIter iter;
+	gpointer key, value;
+	
+	g_hash_table_iter_init (&iter, priv->entry_map);
+	while (g_hash_table_iter_next (&iter, &key, &value)) {
+		if (((Itdb_Track *)value)->mediatype == MEDIATYPE_AUDIO)
+			g_hash_table_insert (result, key, key);
+	}
+	
+	return result;
 }
 
 void
@@ -1960,22 +1988,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	
 	rb_ipod_prefs_update_sync (priv->prefs);
 	
-	/*
-	
-	// Remove tracks and podcasts on iPod, but not in itinerary
-	rb_ipod_source_trash_entries ( ipod_source, rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
-	
-	// Done with this list, clear it.
-	rb_ipod_prefs_set_list(priv->prefs, SYNC_TO_REMOVE, NULL);
-	
-	// Transfer needed tracks and podcasts from itinerary to iPod
-	rb_ipod_source_add_entries ( ipod_source, rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_ADD) );
-	
-	// Done with this list, clear it.
-	rb_ipod_prefs_set_list(priv->prefs, SYNC_TO_ADD, NULL);
-	
-	*/
-	
+	///*
 	// DEBUGGING - Print the lists
 	GList *iter;
 	g_print("To Add:\n");
@@ -1999,5 +2012,18 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ARTIST),
 			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ALBUM));
 	}
+	//*/
+	
+	// Remove tracks and podcasts on iPod, but not in itinerary
+	rb_ipod_source_trash_entries ( ipod_source, rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
+	
+	// Done with this list, clear it.
+	rb_ipod_prefs_set_list(priv->prefs, SYNC_TO_REMOVE, NULL);
+	
+	// Transfer needed tracks and podcasts from itinerary to iPod
+	rb_ipod_source_add_entries ( ipod_source, rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_ADD) );
+	
+	// Done with this list, clear it.
+	rb_ipod_prefs_set_list(priv->prefs, SYNC_TO_ADD, NULL);
 }
 

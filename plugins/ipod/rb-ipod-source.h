@@ -81,8 +81,10 @@ void			rb_ipod_source_add_entries	(RBiPodSource *source,
 
 void			rb_ipod_source_trash_entries	(RBiPodSource *source,
 							 GList *entries);
+							 
+GHashTable *		rb_ipod_source_get_podcasts	(RBiPodSource *source);
 
-RhythmDB *		rb_ipod_source_get_db		(RBiPodSource *source);
+GHashTable *		rb_ipod_source_get_entries	(RBiPodSource *source);
 
 G_END_DECLS
 

@@ -42,8 +42,8 @@ typedef struct {
 	
 	/* Pointers to stuff for setting up the sync */
 	RBShell *shell;
-	RhythmDB *library_db;
-	RhythmDB *ipod_db;
+	RhythmDB *db;
+	RBiPodSource *ipod_source;
 	
 	
 	/* loaded/saved to file */
@@ -96,11 +96,10 @@ rb_ipod_prefs_dispose (GObject *object)
 	if (priv->shell != NULL)
 		g_object_unref (priv->shell);
 		
-	if (priv->library_db != NULL)
-		g_object_unref (priv->library_db);
+	if (priv->db != NULL)
+		g_object_unref (priv->db);
 		
-	if (priv->ipod_db != NULL)
-		g_object_unref (priv->ipod_db);
+	priv->ipod_source = NULL;
 	
 	G_OBJECT_CLASS (rb_ipod_prefs_parent_class)->dispose (object);
 }
@@ -222,6 +221,12 @@ rb_ipod_prefs_tree_view_insert (GtkTreeModel *query_model,
 	
 	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
 	
+	// DEBUGGING
+	//g_print ("Inserting: %15s - %15s - %15s\n",
+	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
+	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
+	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
+	
 	rb_ipod_prefs_hash_table_insert (entry, NULL, insertion_data);
 	
 	return FALSE;
@@ -251,44 +256,64 @@ rb_ipod_prefs_calculate_space_needed (RBiPodPrefs *prefs)
 	return priv->sync_space_needed;
 }
 
+/* Duplicates hash2 into hash1 */
 static void
-hash_table_insert_all (RBiPodPrefs *prefs,
-		       RhythmDB *db,
-		       GHashTable *hash,
-		       RhythmDBEntryType type)
+hash_table_duplicate (GHashTable **hash1, GHashTable *hash2)
 {
-	HashTableInsertionData insertion_data = { prefs, &hash };
-	GtkTreeModel *query_model;
+	GHashTableIter iter;
+	gpointer key, value;
 	
-	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
-		rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (query_model),
-					RHYTHMDB_QUERY_PROP_EQUALS,
-					RHYTHMDB_PROP_TYPE, type,
-					RHYTHMDB_QUERY_END);
-		gtk_tree_model_foreach (query_model,
-					(GtkTreeModelForeachFunc) rb_ipod_prefs_tree_view_insert,
-					&insertion_data);
+	g_hash_table_iter_init (&iter, hash2);
+	while (g_hash_table_iter_next (&iter, &key, &value)) {
+		// DEBUGGING
+		//g_print ("Duplicating: %15s - %15s - %15s\n",
+		//	 rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
+		//	 rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
+		//	 rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ALBUM));
+		
+		g_hash_table_insert(*hash1, key, value);
+	}
 }
 
 static void
-hash_table_insert_some (RBiPodPrefs *prefs,
-			RhythmDB *db,
-			GHashTable *hash,
-			guint list,
-			GList *playlists )
+hash_table_insert_all (RBiPodPrefs *prefs,
+		       GHashTable *hash,
+		       RhythmDBEntryType entry_type)
 {
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	HashTableInsertionData insertion_data = { prefs, &hash };
+	GtkTreeModel *query_model;
+	RhythmDB *db = priv->db;
+	
+	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
+	rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (query_model),
+				RHYTHMDB_QUERY_PROP_EQUALS,
+				RHYTHMDB_PROP_TYPE, entry_type,
+				RHYTHMDB_QUERY_END);
+	gtk_tree_model_foreach (query_model,
+				(GtkTreeModelForeachFunc) rb_ipod_prefs_tree_view_insert,
+				&insertion_data);
+}
+
+static void
+hash_table_insert_some_playlists (RBiPodPrefs *prefs,
+				  GHashTable *hash)
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	const gchar **iter;
 	gchar *name;
-	GList *list_iter = playlists;
+	GList *list_iter, *items;
 	GtkTreeModel *query_model;
 	HashTableInsertionData insertion_data = { prefs, &hash };
-	
-	for ( iter = (const gchar **) rb_ipod_prefs_get_string_list ( prefs, list );
+
+
+	items = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (priv->shell) );	
+	for ( iter = (const gchar **) rb_ipod_prefs_get_string_list ( prefs, SYNC_PLAYLISTS_LIST );
 	      *iter != NULL;
 	      iter++ )
 	{
-		// get playlist with ( g_strcmp(name, iter) == 0 )
-		for (list_iter = playlists;
+		// get item with ( g_strcmp(name, iter) == 0 )
+		for (list_iter = items;
 		     list_iter;
 		     list_iter = list_iter->next )
 		{
@@ -296,18 +321,51 @@ hash_table_insert_some (RBiPodPrefs *prefs,
 			g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
 			
 			if ( g_strcmp0 ( name, *iter ) == 0 ) {
-				rhythmdb_entry_get_entry_type (list_iter->data);
+				// DEBUGGING
+				//g_print("Found Playlist: %s\n", name);
 				
-				// Get it's entries, and add them to the itinerary_sync_hash
 				query_model = GTK_TREE_MODEL (rb_playlist_source_get_query_model (list_iter->data));
 				
+				// Add the entries to the hash_table
 				gtk_tree_model_foreach (query_model,
 							(GtkTreeModelForeachFunc) rb_ipod_prefs_tree_view_insert,
 							&insertion_data);
-				
 				break;
 			}
 		}
+	}
+	g_list_free (items);
+}
+
+static void
+hash_table_insert_some_podcasts (RBiPodPrefs *prefs,
+				 GHashTable *hash)
+{
+	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
+	const gchar **iter;
+	GtkTreeModel *query_model;
+	HashTableInsertionData insertion_data = { prefs, &hash };
+	
+	for (iter = (const gchar **) rb_ipod_prefs_get_string_list (prefs, SYNC_PODCASTS_LIST);
+	     *iter != NULL;
+	     iter++)
+	{
+		// DEBUGGING
+		//g_print ("Found Podcast: %s\n", *iter);
+		
+		// It is a podcast feed
+		query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(priv->db));
+		rhythmdb_do_full_query (priv->db, RHYTHMDB_QUERY_RESULTS (query_model),
+					RHYTHMDB_QUERY_PROP_EQUALS,
+					RHYTHMDB_PROP_TYPE, RHYTHMDB_ENTRY_TYPE_PODCAST_POST,
+					RHYTHMDB_QUERY_PROP_EQUALS,
+					RHYTHMDB_PROP_ALBUM, *iter,
+					RHYTHMDB_QUERY_END);
+		
+		// Add the entries to the hash_table
+		gtk_tree_model_foreach (query_model,
+					(GtkTreeModelForeachFunc) rb_ipod_prefs_tree_view_insert,
+					&insertion_data);
 	}
 }
 
@@ -319,25 +377,19 @@ rb_ipod_prefs_update_sync ( RBiPodPrefs *prefs )
 	GHashTable *ipod_hash = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
 	GList	*to_add = NULL; // Files to go onto the iPod
 	GList	*to_remove = NULL; // Files to be removed from the iPod
-	GList	*playlists = NULL;
 	HashTableComparisonData comparison_data;
 	
 	/* Build itinerary_hash */
-	playlists = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (priv->shell) );
 	if (priv->sync_music) {
 		if (priv->sync_music_all) {
 			// Syncing all songs
 			hash_table_insert_all (prefs,
-					       priv->library_db,
 					       itinerary_hash,
 					       RHYTHMDB_ENTRY_TYPE_SONG);
 		} else {
 			// Only syncing some songs
-			hash_table_insert_some (prefs,
-						priv->library_db,
-						itinerary_hash,
-						SYNC_PLAYLISTS_LIST,
-						playlists );
+			hash_table_insert_some_playlists (prefs,
+							  itinerary_hash);
 		}
 	}
 	
@@ -345,32 +397,23 @@ rb_ipod_prefs_update_sync ( RBiPodPrefs *prefs )
 		if (priv->sync_podcasts_all) {
 			// Syncing all podcasts
 			hash_table_insert_all (prefs,
-					       priv->library_db,
 					       itinerary_hash,
 					       RHYTHMDB_ENTRY_TYPE_PODCAST_POST);
 		} else {
 			// Only syncing some podcasts
-			hash_table_insert_some (prefs,
-						priv->library_db,
-						itinerary_hash,
-						SYNC_PODCASTS_LIST,
-						playlists);
+			hash_table_insert_some_podcasts (prefs,
+							 itinerary_hash);
 		}
 	}
 	
-	g_list_free (playlists);
-	
 	/* Build ipod_hash */
-	if (priv->sync_music)
-		hash_table_insert_all (prefs,
-				       priv->ipod_db,
-				       ipod_hash,
-				       RHYTHMDB_ENTRY_TYPE_SONG);
-	if (priv->sync_podcasts)
-		hash_table_insert_all (prefs,
-				       priv->ipod_db,
-				       ipod_hash,
-				       RHYTHMDB_ENTRY_TYPE_PODCAST_POST);
+	if (priv->sync_music) {
+		hash_table_duplicate (&ipod_hash, rb_ipod_source_get_entries (priv->ipod_source));
+	}
+	
+	if (priv->sync_podcasts) {
+		hash_table_duplicate (&ipod_hash, rb_ipod_source_get_podcasts (priv->ipod_source));
+	}
 	
 	/* Build Addition List */
 	comparison_data.other_hash_table = ipod_hash;
@@ -465,8 +508,8 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 	GMount *mount;
 	
 	g_object_get (source, "shell", &priv->shell, NULL);
-	g_object_get (priv->shell, "db", &priv->library_db, NULL);
-	priv->ipod_db = rb_ipod_source_get_db (RB_IPOD_SOURCE (source));
+	g_object_get (priv->shell, "db", &priv->db, NULL);
+	priv->ipod_source = source;
 	
 	// Load the key_file if it isn't already
 	priv->key_file = (key_file == NULL ? rb_ipod_prefs_load_file(prefs, &error) : key_file);
@@ -510,8 +553,6 @@ rb_ipod_prefs_new (GKeyFile *key_file, RBiPodSource *source )
 											   "sync_podcasts_list",
 											   NULL,
 											   NULL) );
-
-	rb_ipod_prefs_update_sync (prefs);
 
      	return prefs;
 }
