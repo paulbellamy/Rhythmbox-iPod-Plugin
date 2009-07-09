@@ -161,10 +161,26 @@ rb_ipod_prefs_hash_table_compare (gpointer key,		// RhythmDBEntry *
 				  gpointer user_data)	// HashTableComparisonData *
 {
 	HashTableComparisonData *data = user_data;
+/*	
+	gpointer orig_key;
 	
+	if ( !g_hash_table_lookup_extended (data->other_hash_table, key, &orig_key, &value) ) {
+		g_print("Not Found: %15s - %15s - %15s\n",
+			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_TITLE),
+			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ARTIST),
+			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
+		*(data->list) = g_list_append ( *(data->list), key );
+	} else {
+		g_print("Found: %15s - %15s - %15s\n",
+			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_TITLE),
+			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ARTIST),
+			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
+	}
+*/	
 	if ( !g_hash_table_lookup (data->other_hash_table, key) ) {
 		*(data->list) = g_list_append ( *(data->list), key );
 	}
+
 }
 
 typedef struct {

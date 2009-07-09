@@ -1446,6 +1446,36 @@ utf8_to_ascii (const gchar *utf8)
 }
 
 static gchar *
+generate_ipod_filename_unique (const gchar *mount_point, const gchar *filename)
+{
+	/* To be called by 'generate_ipod_filename' if it cannot find an untaken name */
+	gchar *ipod_filename = NULL;
+	gchar *temp = NULL;
+	gint tries = 0;
+	
+	do {
+		g_free (ipod_filename);
+		g_free (temp);
+		g_sprintf (temp, "%s_%u", filename, tries+1 );
+		ipod_filename = get_ipod_filename (mount_point, temp);
+		tries++;
+		if (tries > MAX_TRIES) {
+			break;
+		}
+	} while ((ipod_filename == NULL)
+		 || (g_file_test (ipod_filename, G_FILE_TEST_EXISTS)));
+
+	if (tries > MAX_TRIES) {
+		/* FIXME: Really could not make a unique name. fail. */
+		return NULL;
+	} else {
+		return ipod_filename;
+	}
+	
+	
+}
+
+static gchar *
 generate_ipod_filename (const gchar *mount_point, const gchar *filename)
 {
 	gchar *ipod_filename = NULL;
@@ -1475,12 +1505,12 @@ generate_ipod_filename (const gchar *mount_point, const gchar *filename)
 	} while ((ipod_filename == NULL)
 		 || (g_file_test (ipod_filename, G_FILE_TEST_EXISTS)));
 
-	g_free (pc_filename);
-
 	if (tries > MAX_TRIES) {
-		/* FIXME: should create a unique filename */
-		return NULL;
+		/* Try to generate a unique name */
+		g_free (ipod_filename);
+		return generate_ipod_filename_unique (mount_point, pc_filename);
 	} else {
+		g_free (pc_filename);
 		return ipod_filename;
 	}
 }
@@ -1988,7 +2018,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	
 	rb_ipod_prefs_update_sync (priv->prefs);
 	
-	///*
+	//*
 	// DEBUGGING - Print the lists
 	GList *iter;
 	g_print("To Add:\n");
@@ -2013,7 +2043,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ALBUM));
 	}
 	//*/
-	
+	//*
 	// Remove tracks and podcasts on iPod, but not in itinerary
 	rb_ipod_source_trash_entries ( ipod_source, rb_ipod_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
 	
@@ -2025,5 +2055,6 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	
 	// Done with this list, clear it.
 	rb_ipod_prefs_set_list(priv->prefs, SYNC_TO_ADD, NULL);
+	//*/
 }
 

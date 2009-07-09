@@ -685,7 +685,7 @@ rb_ipod_helpers_track_equal (gconstpointer v1,
 	
 	if ( rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v1, RHYTHMDB_PROP_FILE_SIZE) != rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v2, RHYTHMDB_PROP_FILE_SIZE) )
 		return FALSE;
-	
+	/*
 	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DURATION) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DURATION) )
 		return FALSE;
 	
@@ -703,6 +703,7 @@ rb_ipod_helpers_track_equal (gconstpointer v1,
 	
 	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_POST_TIME) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_POST_TIME) )
 		return FALSE;
+	*/
 	
 	return TRUE;
 }
