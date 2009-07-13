@@ -93,9 +93,9 @@ void	 rb_ipod_prefs_set_entry	( RBiPodPrefs *prefs,
 					  guint prop_id,
 					  const gchar * entry,
 					  gboolean value );
-gint	 rb_ipod_prefs_get_int		( RBiPodPrefs *prefs,
+guint64	 rb_ipod_prefs_get_uint64	( RBiPodPrefs *prefs,
 					  guint prop_id );
-void	 rb_ipod_prefs_set_int		( RBiPodPrefs *prefs,
+void	 rb_ipod_prefs_set_uint64	( RBiPodPrefs *prefs,
 					  guint prop_id,
 					  gint value );
 

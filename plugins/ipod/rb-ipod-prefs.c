@@ -58,7 +58,7 @@ typedef struct {
 	/* generated on load and rb_ipod_prefs_sync_update */
 	GList *  sync_to_add;
 	GList *  sync_to_remove;
-	gint	 sync_space_needed;
+	guint64	 sync_space_needed; // The space used after syncing
 	
 } RBiPodPrefsPrivate;
 
@@ -248,26 +248,27 @@ rb_ipod_prefs_tree_view_insert (GtkTreeModel *query_model,
 	return FALSE;
 }
 
-static gint
+static guint64
 rb_ipod_prefs_calculate_space_needed (RBiPodPrefs *prefs)
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	GList * list_iter;
+	const gchar *mount_point = rb_ipod_source_get_mount_point (priv->ipod_source);
 	
-	priv->sync_space_needed = 0;
+	priv->sync_space_needed = rb_ipod_helpers_get_capacity (mount_point) - rb_ipod_helpers_get_free_space (mount_point);
 	
 	for (list_iter = priv->sync_to_add; list_iter; list_iter = list_iter->next) {		
-		priv->sync_space_needed += (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
-										RHYTHMDB_PROP_FILE_SIZE );
+		priv->sync_space_needed += rhythmdb_entry_get_uint64 ( list_iter->data,
+								       RHYTHMDB_PROP_FILE_SIZE );
 	}
 	
 	for (list_iter = priv->sync_to_remove; list_iter; list_iter = list_iter->next) {		
-		priv->sync_space_needed -= (gint64) rhythmdb_entry_get_uint64 ( list_iter->data,
-										RHYTHMDB_PROP_FILE_SIZE );
+		priv->sync_space_needed -= rhythmdb_entry_get_uint64 ( list_iter->data,
+								       RHYTHMDB_PROP_FILE_SIZE );
 	}
 	
 	// DEBUGGING
-	g_print("Space Needed: %.2lf MB\n", (long int) (priv->sync_space_needed) / 1000000.0 );
+	g_print("Space Needed: %s\n", g_format_size_for_display (priv->sync_space_needed));
 	
 	return priv->sync_space_needed;
 }
@@ -631,7 +632,6 @@ rb_ipod_prefs_set_boolean ( RBiPodPrefs *prefs,
 		default:		break;
 	}
 	
-	rb_ipod_prefs_update_sync (prefs);
 	rb_ipod_prefs_save_file (prefs, NULL);
 }
 
@@ -741,13 +741,12 @@ rb_ipod_prefs_set_entry ( RBiPodPrefs *prefs,
 			return;
 	}
 	
-	rb_ipod_prefs_update_sync (prefs);
 	rb_ipod_prefs_save_file (prefs, NULL);
 }
 				  
-gint
-rb_ipod_prefs_get_int ( RBiPodPrefs *prefs,
-			guint prop_id )
+guint64
+rb_ipod_prefs_get_uint64 ( RBiPodPrefs *prefs,
+			   guint prop_id )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	
@@ -761,9 +760,9 @@ rb_ipod_prefs_get_int ( RBiPodPrefs *prefs,
 }
 
 void
-rb_ipod_prefs_set_int ( RBiPodPrefs *prefs,
-			guint prop_id,
-			gint value )
+rb_ipod_prefs_set_uint64 ( RBiPodPrefs *prefs,
+			   guint prop_id,
+			   gint value )
 {
 	RBiPodPrefsPrivate *priv = IPOD_PREFS_GET_PRIVATE (prefs);
 	

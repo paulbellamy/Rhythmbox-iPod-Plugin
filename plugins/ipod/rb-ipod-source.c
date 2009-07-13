@@ -1206,6 +1206,40 @@ request_artwork (RBiPodSource *isource,
 	}
 }
 
+Itdb_Playlist *
+rb_ipod_source_get_playlist (RBiPodSource *source,
+			     gchar *name)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	Itdb_Playlist *ipod_playlist;
+	
+	ipod_playlist = rb_ipod_db_get_playlist_by_name (priv->ipod_db, name);
+	
+	/* Playlist doesn't exist on the iPod, create it */
+	if (ipod_playlist == NULL) {
+		ipod_playlist = itdb_playlist_new (_(name), FALSE);
+		rb_ipod_db_add_playlist (priv->ipod_db, ipod_playlist);
+		add_rb_playlist (source, ipod_playlist);
+	}
+	
+	return ipod_playlist;
+}
+/*
+static void
+add_to_playlist (RBiPodSource *source,
+		 Itdb_Track *song,
+		 Itdb_Playlist *playlist)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	gchar *filename;
+	const gchar *mount_path;
+
+	mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
+  	filename = ipod_path_to_uri (mount_path, song->ipod_path);
+ 	rb_static_playlist_source_add_location (RB_STATIC_PLAYLIST_SOURCE (playlist), filename, -1);
+	g_free (filename);
+}
+*/
 static void
 add_to_podcasts (RBiPodSource *source, Itdb_Track *song)
 {
@@ -1384,42 +1418,56 @@ get_ipod_filename (const char *mount_point, const char *filename)
 void
 rb_ipod_source_add_entry (RBiPodSource *source, RhythmDBEntry *entry)
 {
-	rb_removable_media_source_should_paste ((RBRemovableMediaSource *)source,
-						entry);
+//	rb_removable_media_source_should_paste ((RBRemovableMediaSource *)source,
+//						entry);
+		
+	g_assert (source != NULL);
 	
-g_print("Transferring: %20s - %20s - %10s\n",
-	rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
-	rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
-	rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
+	// Skip undownloaded podcasts
+	if (rhythmdb_entry_get_entry_type (entry) == RHYTHMDB_ENTRY_TYPE_PODCAST_POST)
+	if (!rb_podcast_manager_entry_downloaded (entry))
+		return;
+	
+	g_print("Transferring: %20s - %20s - %10s\n",
+		rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
+		rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
+		rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
+	
+	// If it is a playlist, recurse into it adding all elements of it
+	if (rhythmdb_entry_get_entry_type (entry, RHYTHMDB_PROP_ENTRY_TYPE) == RHYTHMDB_ENTRY_TYPE_PLAYLIST) {
 		
-		// Skip undownloaded podcasts
-		if (!rb_podcast_manager_entry_downloaded (entry))
-			return;
-		
-		RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE(source);
-		const gchar *mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
-		
-g_print("mount_path = %s\n",mount_path);
-		
-		const gchar *filename = g_filename_from_uri (rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION),
-						      NULL,
-						      NULL);
-		const gchar *dest = ipod_path_from_unix_path (mount_path, filename);
-		
-g_print("filename = %s\ndest = %s\n", filename, dest);
+	}
+	
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE(source);
+	const gchar *mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
+	
+	g_print("mount_path = %s\n",mount_path);
+	
+	const gchar *filename = g_filename_from_uri (rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION),
+						     NULL,
+						     NULL);
+	const gchar *dest = ipod_path_from_unix_path (mount_path, filename);
+	
+	g_print("filename = %s\ndest = %s\n", filename, dest);
 
-		impl_track_added ((RBRemovableMediaSource *) source,
-				  entry,
-				  ipod_path_from_unix_path (mount_path, filename),
-				  rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE),
-				  rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_MIMETYPE));
-	
+	impl_track_added ((RBRemovableMediaSource *) source,
+			  entry,
+			  ipod_path_from_unix_path (mount_path, filename),
+			  rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE),
+			  rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_MIMETYPE));
 }
 */
+
 void
 rb_ipod_source_add_entries (RBiPodSource *source, GList *entries)
 {
 	rb_source_paste ((RBSource *)source, entries);
+	/*
+	while (entries != NULL) {
+		rb_ipod_source_add_entry (source, entries->data);
+		entries = entries->next;
+	}
+	*/
 }
 
 #define MAX_TRIES 5
@@ -1635,7 +1683,7 @@ impl_get_mime_types (RBRemovableMediaSource *source)
 }
 
 
-void
+Itdb_Playlist *
 rb_ipod_source_new_playlist (RBiPodSource *source)
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
@@ -1643,12 +1691,13 @@ rb_ipod_source_new_playlist (RBiPodSource *source)
 
 	if (priv->ipod_db == NULL) {
 		rb_debug ("can't create new ipod playlist with no ipod db");
-		return;
+		return NULL;
 	}
 
 	ipod_playlist = itdb_playlist_new (_("New playlist"), FALSE);
 	rb_ipod_db_add_playlist (priv->ipod_db, ipod_playlist);
 	add_rb_playlist (source, ipod_playlist);
+	return ipod_playlist;
 }
 
 void
@@ -1703,7 +1752,59 @@ typedef struct {
 	RBiPodPrefs *prefs;
 	GtkTreeStore *tree_store;
 	GtkTreeView  *tree_view;
+	GtkProgressBar *preview_bar;
+	const gchar *mp;
 } RBiPodSyncEntriesChangedData;
+
+static void
+update_sync_preview_bar (RBiPodSyncEntriesChangedData *data) {
+	char *text;
+	const gchar *mp = data->mp;
+	char *used;
+	char *capacity;
+	
+	rb_ipod_prefs_update_sync (data->prefs);
+	
+	used = g_format_size_for_display (rb_ipod_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED));
+	capacity = g_format_size_for_display (rb_ipod_helpers_get_capacity(mp));
+	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (data->preview_bar), 
+				       (double)(rb_ipod_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED))/(double)rb_ipod_helpers_get_capacity (mp));
+	/* Translators: this is used to display the amount of storage space which will be
+	 * used and the total storage space on an iPod after it is synced.
+	 */
+	text = g_strdup_printf (_("%s of %s"), used, capacity);
+	gtk_progress_bar_set_text (GTK_PROGRESS_BAR (data->preview_bar), text);
+	g_free (text);
+	g_free (capacity);
+	g_free (used);
+}
+
+static void
+set_treeview_children (RBiPodSyncEntriesChangedData *data,
+		       GtkTreeIter *parent,
+		       guint list,
+		       gboolean value)
+{
+	GtkTreeIter iter;
+//	GtkCellRendererToggle *toggle;
+	gchar *name;
+	gboolean valid;
+	
+	valid = gtk_tree_model_iter_children (GTK_TREE_MODEL (data->tree_store), &iter, parent);
+		
+	while (valid) {
+		gtk_tree_model_get (GTK_TREE_MODEL (data->tree_store), &iter,
+				    1, &name,
+				    -1);
+		gtk_tree_store_set (data->tree_store, &iter,
+				    0, rb_ipod_prefs_get_entry (data->prefs, list, name) && value,
+				    2, value,
+				    -1);
+		
+		g_free (name);
+		valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (data->tree_store), &iter);
+	}
+}
 
 static void
 rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
@@ -1730,10 +1831,14 @@ rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 			rb_ipod_prefs_set_boolean (data->prefs,		// RBiPodPrefs *
 						   SYNC_MUSIC,		// int
 						   value);		// gboolean
+			// Enable/Disable the children of this node.
+			set_treeview_children (data, &iter, SYNC_PLAYLISTS_LIST, value);
 		} else if (g_strcmp0 (name, "Podcasts") == 0) {
 			rb_ipod_prefs_set_boolean (data->prefs,		// RBiPodPrefs *
 						   SYNC_PODCASTS,	// int
 						   value);		// gboolean
+			// Enable/Disable the children of this node.
+			set_treeview_children (data, &iter, SYNC_PODCASTS_LIST, value);
 		} else {
 			if (path[0] == '0')
 				rb_ipod_prefs_set_entry (data->prefs,	// RBiPodPrefs *
@@ -1747,6 +1852,8 @@ rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 						 	 value);	// gboolean
 		}
 	}
+	
+	update_sync_preview_bar (data);
 }
 
 void
@@ -1841,8 +1948,8 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	/* FIXME: Needs to set up the treeview here, also
 	 */
 	// Set tree models for each treeview
-	label = gtk_builder_get_object (builder, "treeview-ipod-sync");
-	GtkTreeStore *tree_store = gtk_tree_store_new (2, G_TYPE_BOOLEAN, G_TYPE_STRING);
+	// tree_store columns are: Active, Name, Activatable
+	GtkTreeStore *tree_store = gtk_tree_store_new (3, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
 	GtkTreeIter  tree_iter;
 	GtkTreeIter  parent_iter;
 	GList * list_iter;
@@ -1850,10 +1957,15 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	GtkCellRenderer *renderer;
 	gchar *name;
 	RhythmDB *library_db;
+	
 	RBiPodSyncEntriesChangedData *entries_changed_data = g_new0 (RBiPodSyncEntriesChangedData, 1);
 	entries_changed_data->prefs = priv->prefs;
 	entries_changed_data->tree_store = tree_store;
+	label = gtk_builder_get_object (builder, "progressbar-ipod-sync-preview");
+	entries_changed_data->preview_bar = GTK_PROGRESS_BAR (label);
+	label = gtk_builder_get_object (builder, "treeview-ipod-sync");
 	entries_changed_data->tree_view = GTK_TREE_VIEW (label);
+	entries_changed_data->mp = mp;
 		
 	g_object_get (source, "shell", &shell, NULL);
 	g_object_get (shell, "db", &library_db, NULL);
@@ -1867,6 +1979,7 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	gtk_tree_store_set (tree_store, &parent_iter,
 			    0, rb_ipod_prefs_get_boolean (priv->prefs, SYNC_MUSIC),
 			    1, "Music Playlists",
+			    2, TRUE,
 			    -1);
 	
 	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
@@ -1877,8 +1990,10 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 		
 		// set this row's data
 		gtk_tree_store_set (tree_store, &tree_iter,
-				    0, rb_ipod_prefs_get_entry (priv->prefs, SYNC_PLAYLISTS_LIST, name),
+				    0, rb_ipod_prefs_get_entry (priv->prefs, SYNC_PLAYLISTS_LIST, name)
+				    	&& rb_ipod_prefs_get_boolean (priv->prefs, SYNC_MUSIC),
 				    1, name,
+				    2, rb_ipod_prefs_get_boolean (priv->prefs, SYNC_MUSIC),
 				    -1);
                 
 		list_iter = list_iter->next;
@@ -1891,6 +2006,7 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	gtk_tree_store_set (tree_store, &parent_iter,
 			    0, rb_ipod_prefs_get_boolean (priv->prefs, SYNC_PODCASTS),
 			    1, "Podcasts",
+			    2, TRUE,
 			    -1);
 	
 	GtkTreeModel *query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(library_db));
@@ -1907,8 +2023,10 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 		// set up this row
 		name = strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE));
 		gtk_tree_store_set (tree_store, &tree_iter2,
-				    0, rb_ipod_prefs_get_entry (priv->prefs, SYNC_PODCASTS_LIST, name),
+				    0, rb_ipod_prefs_get_entry (priv->prefs, SYNC_PODCASTS_LIST, name)
+				    	&& rb_ipod_prefs_get_boolean (priv->prefs, SYNC_PODCASTS),
 				    1, name,
+				    2, rb_ipod_prefs_get_boolean (priv->prefs, SYNC_PODCASTS),
 				    -1);
 		g_free (name);
 		
@@ -1922,6 +2040,8 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	col = gtk_tree_view_column_new_with_attributes (NULL,
 							renderer,
 							"active", 0,
+							"sensitive", 2,
+							"activatable", 2,
 							NULL);
 	g_signal_connect (G_OBJECT(renderer),
 			  "toggled", G_CALLBACK (rb_ipod_sync_entries_changed_cb),
@@ -1933,6 +2053,7 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	col = gtk_tree_view_column_new_with_attributes (NULL,
 							renderer,
 							"text", 1,
+							"sensitive", 2,
 							NULL);
 	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
 	gtk_tree_view_set_model (GTK_TREE_VIEW(label),
@@ -1942,6 +2063,9 @@ rb_ipod_source_show_properties (RBiPodSource *source)
 	
 	g_object_unref (shell);
 	g_object_unref (tree_store);
+	
+	/* Set up the Sync Preview Bar */
+	update_sync_preview_bar (entries_changed_data);
 
 	label = gtk_builder_get_object (builder, "label-device-node-value");
 	text = rb_ipod_helpers_get_device (RB_SOURCE(source));
@@ -1965,6 +2089,13 @@ rb_ipod_source_show_properties (RBiPodSource *source)
  	gtk_widget_show (GTK_WIDGET (dialog));
 
 	g_object_unref (builder);
+}
+
+const gchar *
+rb_ipod_source_get_mount_point	(RBiPodSource *source)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	return rb_ipod_db_get_mount_path (priv->ipod_db);
 }
 
 GHashTable *
@@ -2010,7 +2141,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	 RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
 	
 	// Check we have enough space, on the iPod.
-	if (rb_ipod_prefs_get_int (priv->prefs, SYNC_SPACE_NEEDED) > (gint64) (rb_ipod_helpers_get_free_space (rb_ipod_db_get_mount_path (priv->ipod_db)))) {
+	if (rb_ipod_prefs_get_uint64 (priv->prefs, SYNC_SPACE_NEEDED) > rb_ipod_helpers_get_capacity (rb_ipod_db_get_mount_path (priv->ipod_db))) {
 		//Not enough Space on Device throw up an error
 		g_print("Not enough Free Space.\n");
 		return;

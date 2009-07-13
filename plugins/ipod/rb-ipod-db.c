@@ -876,6 +876,15 @@ rb_ipod_db_get_playlists (RbIpodDb *ipod_db)
 	return priv->itdb->playlists;
 }
 
+Itdb_Playlist *
+rb_ipod_db_get_playlist_by_name (RbIpodDb *ipod_db,
+				 gchar *name)
+{
+	RbIpodDbPrivate *priv = IPOD_DB_GET_PRIVATE (ipod_db);
+	
+	return itdb_playlist_by_name (priv->itdb, name);
+}
+
 GList *
 rb_ipod_db_get_tracks (RbIpodDb *ipod_db)
 {
