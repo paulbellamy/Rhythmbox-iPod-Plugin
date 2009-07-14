@@ -2133,6 +2133,13 @@ rb_ipod_source_get_entries	(RBiPodSource *source)
 }
 
 void
+rb_ipod_source_sync_auto_cb (RBipodSource *ipod_source) {
+	RBiPodPrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
+	if (rb_ipod_prefs_get_boolean (priv->prefs, SYNC_AUTO))
+		rb_ipod_source_sync (ipod_source);
+}
+
+void
 rb_ipod_source_sync (RBiPodSource *ipod_source)
 {
 	/* FIXME: this is a pretty ugly skeleton function.
