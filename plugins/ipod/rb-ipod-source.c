@@ -94,6 +94,15 @@ static gboolean rb_ipod_song_artwork_add_cb (RhythmDB *db,
                                              const GValue *metadata,
                                              RBiPodSource *isource);
 
+static void connect_signal_handlers (RBiPodSource *source);
+static void disconnect_signal_handlers (RBiPodSource *source);
+
+static gboolean auto_sync_cb (RhythmDB *db,
+			      RhythmDBEntry *entry,
+			      const gchar *property_name,
+			      const GValue *metadata,
+			      RBiPodSource *ipod_source);
+
 static RhythmDB *get_db_for_source (RBiPodSource *source);
 
 struct _PlayedEntry {
@@ -193,6 +202,44 @@ rb_ipod_source_init (RBiPodSource *source)
 {	
 }
 
+
+static void
+connect_signal_handlers (RBiPodSource *source)
+{
+	RhythmDB *db = get_db_for_source (RB_IPOD_SOURCE (source));
+	
+	g_signal_connect_object (db,
+                                 "entry-extra-metadata-notify::rb:coverArt",
+                                 G_CALLBACK (rb_ipod_song_artwork_add_cb),
+                                 RB_IPOD_SOURCE(source), 0);
+	g_signal_connect_object (db,
+			  	 "entry-added",
+			  	 G_CALLBACK (auto_sync_cb),
+			  	 RB_IPOD_SOURCE(source), 0);
+	g_signal_connect_object (db,
+			  	 "entry-changed",
+			  	 G_CALLBACK (auto_sync_cb),
+			  	 RB_IPOD_SOURCE(source), 0);
+	g_signal_connect_object (db,
+			  	 "entry-deleted",
+			  	 G_CALLBACK (auto_sync_cb),
+			  	 RB_IPOD_SOURCE(source), 0);
+	
+        g_object_unref (G_OBJECT (db));
+}
+
+static void
+disconnect_signal_handlers (RBiPodSource *source)
+{
+	RhythmDB *db = get_db_for_source (RB_IPOD_SOURCE (source));
+	
+	g_signal_handlers_disconnect_by_func (db,
+					     G_CALLBACK (auto_sync_cb),
+					     RB_IPOD_SOURCE(source));
+	
+	g_object_unref (G_OBJECT (db));
+}
+
 static GObject *
 rb_ipod_source_constructor (GType type, guint n_construct_properties,
 			    GObjectConstructParam *construct_properties)
@@ -210,13 +257,8 @@ rb_ipod_source_constructor (GType type, guint n_construct_properties,
 
 	rb_ipod_load_songs (source);
 
-        RhythmDB *db = get_db_for_source (RB_IPOD_SOURCE (source));
-        g_signal_connect_object (db,
-                                 "entry-extra-metadata-notify::rb:coverArt",
-                                 G_CALLBACK (rb_ipod_song_artwork_add_cb),
-                                 RB_IPOD_SOURCE(source), 0);
-        g_object_unref (G_OBJECT (db));
-
+        connect_signal_handlers (source);
+	
 	return G_OBJECT (source);
 }
 
@@ -224,7 +266,7 @@ static void
 rb_ipod_source_dispose (GObject *object)
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (object);
-
+	
 	if (priv->ipod_db) {
 		g_object_unref (G_OBJECT (priv->ipod_db));
 		priv->ipod_db = NULL;
@@ -305,6 +347,8 @@ rb_ipod_source_new (RBPlugin *plugin,
 
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);
         g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
+        
+g_print("Mark.\n");
 
 	return RB_REMOVABLE_MEDIA_SOURCE (source);
 }
@@ -1641,6 +1685,8 @@ impl_delete_thyself (RBSource *source)
             RB_SOURCE_CLASS (rb_ipod_source_parent_class)->impl_delete_thyself (source);
             return;
         }
+        
+        disconnect_signal_handlers (RB_IPOD_SOURCE (source));
 
 	for (p = rb_ipod_db_get_playlists (priv->ipod_db);
 	     p != NULL;
@@ -1681,7 +1727,6 @@ impl_get_mime_types (RBRemovableMediaSource *source)
 
 	return ret;
 }
-
 
 Itdb_Playlist *
 rb_ipod_source_new_playlist (RBiPodSource *source)
@@ -2132,11 +2177,22 @@ rb_ipod_source_get_entries	(RBiPodSource *source)
 	return result;
 }
 
-void
-rb_ipod_source_sync_auto_cb (RBipodSource *ipod_source) {
-	RBiPodPrivate *priv = IPOD_SOURCE_GET_PRIVATE (ipod_source);
-	if (rb_ipod_prefs_get_boolean (priv->prefs, SYNC_AUTO))
-		rb_ipod_source_sync (ipod_source);
+static gboolean 
+auto_sync_cb (RhythmDB *db,
+	      RhythmDBEntry *entry,
+	      const gchar *property_name,
+	      const GValue *metadata,
+	      RBiPodSource *isource)
+{
+g_print("auto_sync_cb...");
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (isource);
+g_print("got_priv...");
+	if (rb_ipod_prefs_get_boolean (priv->prefs, SYNC_AUTO)) {
+g_print("Syncing...");
+		rb_ipod_source_sync (isource);
+	}
+g_print("Finished\n");
+	return TRUE;
 }
 
 void
@@ -2156,7 +2212,7 @@ rb_ipod_source_sync (RBiPodSource *ipod_source)
 	
 	rb_ipod_prefs_update_sync (priv->prefs);
 	
-	//*
+	/*
 	// DEBUGGING - Print the lists
 	GList *iter;
 	g_print("To Add:\n");
