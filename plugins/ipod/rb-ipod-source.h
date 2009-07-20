@@ -75,7 +75,6 @@ void			rb_ipod_source_show_properties	(RBiPodSource *source);
 
 void			rb_ipod_source_sync		(RBiPodSource *ipod_source);
 
-
 void			rb_ipod_source_add_entry	(RBiPodSource *source,
 							 RhythmDBEntry *entry);
 

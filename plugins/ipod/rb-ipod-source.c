@@ -97,11 +97,13 @@ static gboolean rb_ipod_song_artwork_add_cb (RhythmDB *db,
 static void connect_signal_handlers (RBiPodSource *source);
 static void disconnect_signal_handlers (RBiPodSource *source);
 
-static gboolean auto_sync_cb (RhythmDB *db,
-			      RhythmDBEntry *entry,
-			      const gchar *property_name,
-			      const GValue *metadata,
-			      RBiPodSource *ipod_source);
+static void auto_sync_cb (RhythmDB *db,
+			  RhythmDBEntry *entry,
+			  RBiPodSource *ipod_source);
+static void auto_sync_cb_with_changes (RhythmDB *db,
+				       RhythmDBEntry *entry,
+				       GSList *changes,
+				       RBiPodSource *isource);
 
 static RhythmDB *get_db_for_source (RBiPodSource *source);
 
@@ -215,15 +217,18 @@ connect_signal_handlers (RBiPodSource *source)
 	g_signal_connect_object (db,
 			  	 "entry-added",
 			  	 G_CALLBACK (auto_sync_cb),
-			  	 RB_IPOD_SOURCE(source), 0);
-	g_signal_connect_object (db,
-			  	 "entry-changed",
-			  	 G_CALLBACK (auto_sync_cb),
-			  	 RB_IPOD_SOURCE(source), 0);
+			  	 RB_IPOD_SOURCE(source),
+			  	 0);
 	g_signal_connect_object (db,
 			  	 "entry-deleted",
 			  	 G_CALLBACK (auto_sync_cb),
-			  	 RB_IPOD_SOURCE(source), 0);
+			  	 RB_IPOD_SOURCE(source),
+			  	 0);
+	g_signal_connect_object (db,
+			  	 "entry-changed",
+			  	 G_CALLBACK (auto_sync_cb_with_changes),
+			  	 RB_IPOD_SOURCE(source),
+			  	 0);
 	
         g_object_unref (G_OBJECT (db));
 }
@@ -2143,6 +2148,10 @@ rb_ipod_source_get_mount_point	(RBiPodSource *source)
 	return rb_ipod_db_get_mount_path (priv->ipod_db);
 }
 
+/* Podcasts and Tracks on the iPod have the same entry-type
+ * This means we need this function to differentiate between
+ * them and return one set or the other
+ */
 GHashTable *
 rb_ipod_source_get_podcasts	(RBiPodSource *source)
 {
@@ -2160,6 +2169,10 @@ rb_ipod_source_get_podcasts	(RBiPodSource *source)
 	return result;
 }
 
+/* Podcasts and Tracks on the iPod have the same entry-type
+ * This means we need this function to differentiate between
+ * them and return one set or the other
+ */
 GHashTable *
 rb_ipod_source_get_entries	(RBiPodSource *source)
 {
@@ -2177,22 +2190,37 @@ rb_ipod_source_get_entries	(RBiPodSource *source)
 	return result;
 }
 
-static gboolean 
+static void
+auto_sync_cb_with_changes (RhythmDB *db,
+			   RhythmDBEntry *entry,
+			   GSList *changes,
+			   RBiPodSource *isource)
+{
+	auto_sync_cb (db, entry, isource);
+}
+
+static void 
 auto_sync_cb (RhythmDB *db,
 	      RhythmDBEntry *entry,
-	      const gchar *property_name,
-	      const GValue *metadata,
 	      RBiPodSource *isource)
 {
 g_print("auto_sync_cb...");
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (isource);
-g_print("got_priv...");
-	if (rb_ipod_prefs_get_boolean (priv->prefs, SYNC_AUTO)) {
+//	RhythmDBEntryType *entry_type;
+//g_print("getting_entry-type...");
+//	g_object_get (isource, "entry-type", &entry_type, NULL);
+//	if (rhythmdb_entry_get_pointer (entry, RHYTHMDB_PROP_TYPE) != entry_type) {
+	{
+g_print("getting_priv...");
+		RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (isource);
+		if (rb_ipod_prefs_get_boolean (priv->prefs, SYNC_AUTO)) {
 g_print("Syncing...");
-		rb_ipod_source_sync (isource);
+			rb_ipod_source_sync (isource);
+		}
+	
 	}
+	
+//	g_object_unref (entry_type);
 g_print("Finished\n");
-	return TRUE;
 }
 
 void

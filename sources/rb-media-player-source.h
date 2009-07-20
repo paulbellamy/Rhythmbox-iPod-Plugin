@@ -30,13 +30,16 @@
 #ifndef __RB_MEDIA_PLAYER_SOURCE_H
 #define __RB_MEDIA_PLAYER_SOURCE_H
 
+#include <glib.h>
+
 #include "rb-shell.h"
 #include "rb-removable-media-source.h"
+#include "rb-media-player-prefs.h"
 #include "rhythmdb.h"
 
 G_BEGIN_DECLS
 
-#define RB_TYPE_MEDIA_PLAYER_SOURCE	(rb_media_player_get_type ())
+#define RB_TYPE_MEDIA_PLAYER_SOURCE	(rb_media_player_source_get_type ())
 #define RB_MEDIA_PLAYER_SOURCE(obj)	(G_TYPE_CHECK_INSTANCE_CAST ((obj), RB_TYPE_MEDIA_PLAYER_SOURCE))
 #define RB_IS_MEDIA_PLAYER_SOURCE(obj)	(G_TYPE_CHECK_INSTANCE_TYPE ((obj), RB_TYPE_MEDIA_PLAYER_SOURCE))
 #define RB_MEDIA_PLAYER_SOURCE_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST ((klass), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourceClass))
@@ -47,7 +50,6 @@ typedef struct
 {
 	RBRemovableMediaSource parent_instance;
 	
-	/* instance members */
 } RBMediaPlayerSource;
 
 typedef struct
@@ -55,10 +57,34 @@ typedef struct
 	RBRemovableMediaSourceClass parent_class;
 	
 	/* class members */
+	GHashTable *	(*impl_get_entries)	(RBMediaPlayerSource *source);
+	GHashTable *	(*impl_get_podcasts)	(RBMediaPlayerSource *source);
+	guint64		(*impl_get_capacity)	(RBMediaPlayerSource *source);
+	void		(*impl_add_entries)	(RBMediaPlayerSource *source, GList *entries);
+	void		(*impl_trash_entries)	(RBMediaPlayerSource *source, GList *entries);
+	gchar *		(*impl_get_serial)	(RBMediaPlayerSource *source);
+	gchar *		(*impl_get_name)	(RBMediaPlayerSource *source);
+	
 } RBMediaPlayerSourceClass;
 
 /* used by RB_TYPE_MEDIA_PLAYER_SOURCE */
+RBMediaPlayerSource *	rb_media_player_source_new (void);
 GType			rb_media_player_source_get_type	(void);
+
+GHashTable * rb_media_player_source_get_entries (RBMediaPlayerSource *source);
+GHashTable * rb_media_player_source_get_podcasts (RBMediaPlayerSource *source);
+
+guint64	rb_media_player_source_get_capacity (RBMediaPlayerSource *source);
+
+void	rb_media_player_source_add_entries	(RBMediaPlayerSource *source,
+						 GList *entries);
+void	rb_media_player_source_trash_entries	(RBMediaPlayerSource *source,
+						 GList *entries);
+
+gchar * rb_media_player_source_get_serial (RBMediaPlayerSource *source);
+gchar * rb_media_player_source_get_name (RBMediaPlayerSource *source);
+
+void	rb_media_player_source_sync (RBMediaPlayerSource *source);
 
 G_END_DECLS
 

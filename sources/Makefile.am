@@ -26,6 +26,8 @@ libsourcesimpl_la_SOURCES =		\
 	rb-podcast-source.h		\
 	rb-removable-media-source.c	\
 	rb-removable-media-source.h	\
+	rb-media-player-prefs.c		\
+	rb-media-player-prefs.h		\
 	rb-media-player-source.c	\
 	rb-media-player-source.h	\
 	rb-playlist-source.c            \
