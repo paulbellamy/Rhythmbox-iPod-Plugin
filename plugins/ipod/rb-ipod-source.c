@@ -1553,7 +1553,7 @@ generate_ipod_filename_unique (const gchar *mount_point, const gchar *filename)
 	do {
 		g_free (ipod_filename);
 		g_free (temp);
-		g_sprintf (temp, "%s_%u", filename, tries+1 );
+		g_strdup_printf (temp, "%s_%u", filename, tries+1 );
 		ipod_filename = get_ipod_filename (mount_point, temp);
 		tries++;
 		if (tries > MAX_TRIES) {
@@ -1605,11 +1605,11 @@ generate_ipod_filename (const gchar *mount_point, const gchar *filename)
 	if (tries > MAX_TRIES) {
 		/* Try to generate a unique name */
 		g_free (ipod_filename);
-		return generate_ipod_filename_unique (mount_point, pc_filename);
-	} else {
-		g_free (pc_filename);
-		return ipod_filename;
+		ipod_filename = generate_ipod_filename_unique (mount_point, pc_filename);
 	}
+	
+	g_free (pc_filename);
+	return ipod_filename;
 }
 
 static gchar *
