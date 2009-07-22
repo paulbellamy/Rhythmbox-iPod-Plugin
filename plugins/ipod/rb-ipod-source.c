@@ -151,7 +151,7 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	RBSourceClass *source_class = RB_SOURCE_CLASS (klass);
 	RBRemovableMediaSourceClass *rms_class = RB_REMOVABLE_MEDIA_SOURCE_CLASS (klass);
 	RBBrowserSourceClass *browser_source_class = RB_BROWSER_SOURCE_CLASS (klass);
-	RBMediaPlayerSourceClass *mps_class = RB_MEDIA_PLAYER_SOURCE_CLASS (klass);
+	RBMediaPlayerSourceClass *mps_class = rb_ipod_source_parent_class;
 
 	object_class->constructor = rb_ipod_source_constructor;
 	object_class->dispose = rb_ipod_source_dispose;
@@ -181,6 +181,14 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	mps_class->impl_get_serial = impl_get_serial;
 	mps_class->impl_get_name = impl_get_name;
 	mps_class->impl_show_properties = impl_show_properties;
+	
+	g_object_class_install_property (object_class,
+					 0,
+					 g_param_spec_string ("key-file",
+							      "Key-File",
+							      "Pointer to the GKeyfile",
+							      NULL,
+							      G_PARAM_READWRITE));
 
 	g_type_class_add_private (klass, sizeof (RBiPodSourcePrivate));
 }

@@ -65,8 +65,8 @@ static void auto_sync_cb (RhythmDB *db,
 
 static GObject *
 rb_media_player_source_constructor (GType type, 
-			    guint n_construct_properties,
-			    GObjectConstructParam *construct_properties)
+				    guint n_construct_properties,
+				    GObjectConstructParam *construct_properties)
 {
 	GObject *source;
 	
@@ -75,12 +75,12 @@ rb_media_player_source_constructor (GType type,
 	
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	GKeyFile *key_file;
-	g_object_get(source, "key_file", &key_file, NULL);
+	g_object_get(source, "key-file", &key_file, NULL);
 	priv->prefs = rb_media_player_prefs_new ( key_file,
 						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (source) ) );
 	
 	connect_signal_handlers (source);
-			
+	
 	return G_OBJECT (source);
 }
 
