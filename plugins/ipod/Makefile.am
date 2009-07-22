@@ -2,6 +2,10 @@ plugindir = $(PLUGINDIR)/ipod
 plugin_LTLIBRARIES = libipod.la
 
 libipod_la_SOURCES = \
+	$(top_srcdir)/sources/rb-media-player-prefs.c	\
+	$(top_srcdir)/sources/rb-media-player-prefs.h	\
+	$(top_srcdir)/sources/rb-media-player-source.c	\
+	$(top_srcdir)/sources/rb-media-player-source.h	\
 	rb-ipod-db.c				\
 	rb-ipod-db.h				\
 	rb-ipod-helpers.c			\
