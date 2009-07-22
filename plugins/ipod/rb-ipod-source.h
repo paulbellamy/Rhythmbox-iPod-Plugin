@@ -65,30 +65,14 @@ GType                   rb_ipod_source_register_type    (GTypeModule *module);
 Itdb_Playlist *		rb_ipod_source_new_playlist	(RBiPodSource *source);
 void			rb_ipod_source_remove_playlist	(RBiPodSource *ipod_source,
 							 RBSource *source);
-							 
-const gchar *		rb_ipod_source_get_name		(RBiPodSource *source);
 
 Itdb_Playlist *		rb_ipod_source_get_playlist	(RBiPodSource *source,
 							 gchar *name);
 
-void			rb_ipod_source_show_properties	(RBiPodSource *source);
-
-void			rb_ipod_source_sync		(RBiPodSource *ipod_source);
-
 void			rb_ipod_source_add_entry	(RBiPodSource *source,
 							 RhythmDBEntry *entry);
 
-void			rb_ipod_source_add_entries	(RBiPodSource *source,
-							 GList *entries);
-
-void			rb_ipod_source_trash_entries	(RBiPodSource *source,
-							 GList *entries);
-
 const gchar *		rb_ipod_source_get_mount_point	(RBiPodSource *source);
-							 
-GHashTable *		rb_ipod_source_get_podcasts	(RBiPodSource *source);
-
-GHashTable *		rb_ipod_source_get_entries	(RBiPodSource *source);
 
 G_END_DECLS
 

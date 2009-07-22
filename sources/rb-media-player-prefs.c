@@ -609,19 +609,23 @@ rb_media_player_prefs_save_file (RBMediaPlayerPrefs *prefs, GError **error)
 static GKeyFile *
 rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs, GError **error)
 {
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	
+	g_return_val_if_fail (priv->key_file == NULL, priv->key_file);
+	
 	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-	gchar *pathname = rb_find_user_data_file ("ipod-prefs.conf", NULL);
-	GKeyFile *key_file = g_key_file_new();
+	gchar *pathname = rb_find_user_data_file ("media-player-prefs.conf", NULL);
+	priv->key_file = g_key_file_new();
 	GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS;
 	
 	rb_debug ("loading iPod properties from \"%s\"", pathname);
-	if ( !g_key_file_load_from_file (key_file, pathname, flags, error) ) {
+	if ( !g_key_file_load_from_file (priv->key_file, pathname, flags, error) ) {
 		rb_debug ("unable to load iPod properties: %s", (*error)->message);
 	}
 	
 	g_free(pathname);
-	return key_file;
+	return priv->key_file;
 }
 
 RBMediaPlayerPrefs *
@@ -631,22 +635,19 @@ rb_media_player_prefs_new (GKeyFile *key_file, const gchar *group )
 
 	RBMediaPlayerPrefs *prefs = g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS, NULL);
 	
-	
 	g_return_val_if_fail (prefs != NULL, NULL);
 	
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
-	GError *error = NULL;
+//	GError *error = NULL;
 	
 	// Load the key_file if it isn't already
-	priv->key_file = (key_file == NULL ? rb_media_player_prefs_load_file(prefs, &error) : key_file);
-	if (priv->key_file == NULL) {
-		g_object_unref (G_OBJECT (prefs));
-		prefs = NULL;
+	priv->key_file = key_file;
+	priv->group = g_strdup(group);
+	if (!rb_media_player_prefs_load_file (prefs, NULL)) {
+		// Could not load
+		g_object_unref (prefs);
 		return NULL;
 	}
-	
-	// copy the group
-	priv->group = g_strdup(group);
 	
 	// add the group and keys, unless it exists
 	if ( !g_key_file_has_group(priv->key_file, priv->group) ) {

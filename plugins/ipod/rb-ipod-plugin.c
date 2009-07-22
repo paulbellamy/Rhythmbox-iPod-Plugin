@@ -48,6 +48,7 @@
 #include "rb-util.h"
 #include "rb-shell.h"
 #include "rb-stock-icons.h"
+#include "rb-media-player-source.h"
 
 
 #define RB_TYPE_IPOD_PLUGIN		(rb_ipod_plugin_get_type ())
@@ -288,7 +289,7 @@ rb_ipod_plugin_cmd_sync (GtkAction *action,
 		return;
 	}
 
-	rb_ipod_source_sync (RB_IPOD_SOURCE (source));
+	rb_media_player_source_sync ((RBMediaPlayerSource *) (source));
 	g_object_unref (G_OBJECT (source));
 }
 
@@ -306,7 +307,7 @@ rb_ipod_plugin_cmd_properties (GtkAction *action,
 		return;
 	}
 
-	rb_ipod_source_show_properties (RB_IPOD_SOURCE (source));
+	rb_media_player_source_show_properties ((RBMediaPlayerSource *) (source));
 	g_object_unref (G_OBJECT (source));
 }
  

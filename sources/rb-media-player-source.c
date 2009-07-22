@@ -43,14 +43,53 @@ G_DEFINE_TYPE (RBMediaPlayerSource, rb_media_player_source, G_TYPE_OBJECT);
 
 #define MEDIA_PLAYER_SOURCE_GET_PRIVATE(o)   (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourcePrivate))
 
+static GObject *rb_media_player_source_constructor (GType type, 
+					    guint n_construct_properties,
+					    GObjectConstructParam *construct_properties);
 static void rb_media_player_source_dispose (GObject *object);
 static void rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass);
 static void rb_media_player_source_init (RBMediaPlayerSource *self);
+
+static void connect_signal_handlers (GObject *source);
+static void disconnect_signal_handlers (GObject *source);
+
+static void auto_sync_cb_with_changes (RhythmDB *db,
+			   	       RhythmDBEntry *entry,
+			   	       GSList *changes,
+			   	       RBMediaPlayerSource *source);
+static void auto_sync_cb (RhythmDB *db,
+			  RhythmDBEntry *entry,
+			  RBMediaPlayerSource *source);
+
+
+static GObject *
+rb_media_player_source_constructor (GType type, 
+			    guint n_construct_properties,
+			    GObjectConstructParam *construct_properties)
+{
+g_print("rb_media_player_source_constructor called\n");
+	GObject *source;
+	
+	source = G_OBJECT_CLASS(rb_media_player_source_parent_class)
+				->constructor (type, n_construct_properties, construct_properties);
+	
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	GKeyFile *key_file;
+	g_object_get(source, "key_file", &key_file, NULL);
+	priv->prefs = rb_media_player_prefs_new ( key_file,
+						  rb_media_player_source_get_serial ((RBMediaPlayerSource *) source) );
+	
+	connect_signal_handlers (source);
+			
+	return G_OBJECT (source);
+}
 
 static void
 rb_media_player_source_dispose (GObject *object)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (object);
+	
+	disconnect_signal_handlers (object);
 	
 	if (priv->prefs) {
 		g_object_unref (G_OBJECT (priv->prefs));
@@ -64,11 +103,11 @@ static void
 rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
-	
+
+	object_class->constructor = rb_media_player_source_constructor;
 	object_class->dispose = rb_media_player_source_dispose;
 	
-	/* FIXME: These need to be hooked up based on whether it is an ipod or MTP device
-	 */
+	/* pure virtual methods: mandates implementation in children. */
 	klass->impl_get_entries = NULL;
 	klass->impl_get_podcasts = NULL;
 	klass->impl_get_capacity = NULL;
@@ -76,20 +115,13 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 	klass->impl_trash_entries = NULL;
 	klass->impl_get_serial = NULL;
 	klass->impl_get_name = NULL;
+	klass->impl_show_properties = NULL;
 }
 
 static void
 rb_media_player_source_init (RBMediaPlayerSource *self)
 {
 	/* initialize the object */
-}
-
-RBMediaPlayerSource *
-rb_media_player_source_new (void)
-{
-	RBMediaPlayerSource *source = g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS, NULL);
-	
-	return source;
 }
 
 GHashTable *
@@ -149,6 +181,81 @@ rb_media_player_source_get_name (RBMediaPlayerSource *source)
 
 	return klass->impl_get_name (source);
 }
+
+
+static void
+connect_signal_handlers (GObject *source)
+{
+	RBShell *shell;
+	RhythmDB *db;
+	g_object_get (source, "shell", &shell, NULL);
+	g_object_get (shell, "db", &db, NULL);
+	
+	g_signal_connect_object (db,
+			  	 "entry-added",
+			  	 G_CALLBACK (auto_sync_cb),
+			  	 G_OBJECT (source),
+			  	 0);
+	g_signal_connect_object (db,
+			  	 "entry-deleted",
+			  	 G_CALLBACK (auto_sync_cb),
+			  	 G_OBJECT(source),
+			  	 0);
+	g_signal_connect_object (db,
+			  	 "entry-changed",
+			  	 G_CALLBACK (auto_sync_cb_with_changes),
+				 G_OBJECT(source),
+			  	 0);
+	
+        g_object_unref (G_OBJECT (db));
+	g_object_unref (G_OBJECT (shell));
+}
+
+static void
+disconnect_signal_handlers (GObject *source)
+{
+	RBShell *shell;
+	RhythmDB *db;
+	g_object_get (source, "shell", &shell, NULL);
+	g_object_get (shell, "db", &db, NULL);
+	
+	g_signal_handlers_disconnect_by_func (db,
+					     G_CALLBACK (auto_sync_cb),
+					     G_OBJECT(source));
+	
+	g_object_unref (G_OBJECT (db));
+	g_object_unref (G_OBJECT (shell));
+}
+
+static void
+auto_sync_cb_with_changes (RhythmDB *db,
+			   RhythmDBEntry *entry,
+			   GSList *changes,
+			   RBMediaPlayerSource *source)
+{
+	auto_sync_cb (db, entry, source);
+}
+
+static void 
+auto_sync_cb (RhythmDB *db,
+	      RhythmDBEntry *entry,
+	      RBMediaPlayerSource *source)
+{
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+
+	if (rb_media_player_prefs_get_boolean (priv->prefs, SYNC_AUTO))
+		rb_media_player_source_sync (source);
+}
+
+void
+rb_media_player_source_show_properties (RBMediaPlayerSource *source)
+{
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	RBMediaPlayerSourceClass *klass = RB_MEDIA_PLAYER_SOURCE_GET_CLASS (source);
+	
+	return klass->impl_show_properties (source, priv->prefs);
+}
+
 
 void
 rb_media_player_source_sync (RBMediaPlayerSource *source)

@@ -8,8 +8,6 @@ libipod_la_SOURCES = \
 	rb-ipod-helpers.h			\
 	rb-ipod-static-playlist-source.c	\
 	rb-ipod-static-playlist-source.h	\
-	rb-ipod-prefs.c				\
-	rb-ipod-prefs.h				\
 	rb-ipod-source.c			\
 	rb-ipod-source.h			\
 	rb-ipod-plugin.c

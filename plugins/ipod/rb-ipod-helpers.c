@@ -338,7 +338,7 @@ rb_ipod_helpers_get_itunesdb_path (GMount *mount)
         return result;
 }
 
-static guint64 get_fs_property (const char *mountpoint, const char *attr)
+guint64 get_fs_property (const char *mountpoint, const char *attr)
 {
         GFile *root;
         GFileInfo *info;
