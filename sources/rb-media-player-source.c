@@ -77,7 +77,7 @@ g_print("rb_media_player_source_constructor called\n");
 	GKeyFile *key_file;
 	g_object_get(source, "key_file", &key_file, NULL);
 	priv->prefs = rb_media_player_prefs_new ( key_file,
-						  rb_media_player_source_get_serial ((RBMediaPlayerSource *) source) );
+						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (source) ) );
 	
 	connect_signal_handlers (source);
 			

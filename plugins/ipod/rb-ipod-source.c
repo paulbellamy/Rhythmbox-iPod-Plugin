@@ -1073,7 +1073,7 @@ impl_move_to_trash (RBSource *source)
 
 	songs = rb_source_get_entry_view (source);
 	sel = rb_entry_view_get_selected_entries (songs);
-	impl_trash_entries ((RBMediaPlayerSource *)source, sel);
+	impl_trash_entries (RB_MEDIA_PLAYER_SOURCE (source), sel);
 
 	g_list_foreach (sel, (GFunc) rhythmdb_entry_unref, NULL);
 	g_list_free (sel);
