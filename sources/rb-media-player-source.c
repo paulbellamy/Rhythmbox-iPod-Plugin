@@ -67,7 +67,6 @@ rb_media_player_source_constructor (GType type,
 			    guint n_construct_properties,
 			    GObjectConstructParam *construct_properties)
 {
-g_print("rb_media_player_source_constructor called\n");
 	GObject *source;
 	
 	source = G_OBJECT_CLASS(rb_media_player_source_parent_class)

@@ -31,8 +31,8 @@
 #include "rhythmdb.h"
 
 #include "rb-ipod-static-playlist-source.h"
-#include "rb-ipod-source.h"
 #include "rb-media-player-source.h"
+#include "rb-ipod-source.h"
 
 static GObject *rb_ipod_static_playlist_source_constructor (GType type,
 					    guint n_construct_properties,
@@ -285,7 +285,7 @@ impl_move_to_trash (RBSource *source)
 
 	songs = rb_source_get_entry_view (source);
 	sel = rb_entry_view_get_selected_entries (songs);
-	rb_media_player_source_trash_entries ((RBMediaPlayerSource *)(priv->ipod_source), sel);
+	rb_media_player_source_trash_entries (RB_MEDIA_PLAYER_SOURCE (priv->ipod_source), sel);
 
 	g_list_foreach (sel, (GFunc) rhythmdb_entry_unref, NULL);
 	g_list_free (sel);

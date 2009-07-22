@@ -190,7 +190,7 @@ impl_activate (RBPlugin *bplugin,
 							       file,
 							       NULL);
 	g_free (file);
-
+	
 	/* watch for new removable media, and cause a rescan */
 	g_signal_connect (G_OBJECT (rmm),
 			  "create-source-mount", G_CALLBACK (create_source_cb),
