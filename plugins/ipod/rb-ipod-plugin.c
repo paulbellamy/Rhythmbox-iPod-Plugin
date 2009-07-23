@@ -176,6 +176,8 @@ impl_activate (RBPlugin *bplugin,
 		      "removable-media-manager", &rmm,
 		      "ui-manager", &uimanager,
 		      NULL);
+		      
+	plugin->key_file = NULL;
 
 	/* add ipod UI */
 	plugin->action_group = gtk_action_group_new ("iPodActions");
@@ -265,7 +267,7 @@ create_source_cb (RBRemovableMediaManager *rmm, GMount *mount, RBIpodPlugin *plu
 
 	src = RB_SOURCE (rb_ipod_source_new (RB_PLUGIN (plugin),
 					     plugin->shell,
-					     mount, plugin->key_file));
+					     mount, &plugin->key_file));
 
 	plugin->ipod_sources = g_list_prepend (plugin->ipod_sources, src);
 	g_signal_connect_object (G_OBJECT (src),

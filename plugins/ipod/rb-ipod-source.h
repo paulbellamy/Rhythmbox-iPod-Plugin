@@ -55,10 +55,10 @@ typedef struct
 	RBMediaPlayerSourceClass parent;
 } RBiPodSourceClass;
 
-RBRemovableMediaSource	*rb_ipod_source_new		(RBPlugin *plugin,
+RBMediaPlayerSource	*rb_ipod_source_new		(RBPlugin *plugin,
 							 RBShell *shell,
                                                          GMount *mount,
-                                                         GKeyFile *key_file);
+                                                         GKeyFile **key_file);
 GType			rb_ipod_source_get_type		(void);
 GType                   rb_ipod_source_register_type    (GTypeModule *module);
 

@@ -40,7 +40,7 @@ typedef struct {
 } RBMediaPlayerSourcePrivate;
 
 /* macro to create rb_media_player_source_get_type and set rb_media_player_source_parent_class */
-G_DEFINE_TYPE (RBMediaPlayerSource, rb_media_player_source, G_TYPE_OBJECT);
+G_DEFINE_TYPE (RBMediaPlayerSource, rb_media_player_source, RB_TYPE_REMOVABLE_MEDIA_SOURCE);
 
 #define MEDIA_PLAYER_SOURCE_GET_PRIVATE(o)   (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourcePrivate))
 
@@ -62,7 +62,6 @@ static void auto_sync_cb (RhythmDB *db,
 			  RhythmDBEntry *entry,
 			  RBMediaPlayerSource *source);
 
-
 static GObject *
 rb_media_player_source_constructor (GType type, 
 				    guint n_construct_properties,
@@ -74,7 +73,7 @@ rb_media_player_source_constructor (GType type,
 				->constructor (type, n_construct_properties, construct_properties);
 	
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
-	GKeyFile *key_file;
+	GKeyFile **key_file;
 	g_object_get(source, "key-file", &key_file, NULL);
 	priv->prefs = rb_media_player_prefs_new ( key_file,
 						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (source) ) );
@@ -116,6 +115,8 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 	klass->impl_get_serial = NULL;
 	klass->impl_get_name = NULL;
 	klass->impl_show_properties = NULL;
+	
+	g_type_class_add_private (klass, sizeof (RBMediaPlayerSourcePrivate));
 }
 
 static void
@@ -181,7 +182,6 @@ rb_media_player_source_get_name (RBMediaPlayerSource *source)
 
 	return klass->impl_get_name (source);
 }
-
 
 static void
 connect_signal_handlers (GObject *source)

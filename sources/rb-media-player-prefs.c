@@ -140,11 +140,25 @@ rb_media_player_prefs_dispose (GObject *object)
 	G_OBJECT_CLASS (rb_media_player_prefs_parent_class)->dispose (object);
 }
 
+static GObject *
+rb_media_player_prefs_constructor (GType type, 
+				    guint n_construct_properties,
+				    GObjectConstructParam *construct_properties)
+{
+	GObject *prefs;
+	
+	prefs = G_OBJECT_CLASS(rb_media_player_prefs_parent_class)
+				->constructor (type, n_construct_properties, construct_properties);
+	
+	return G_OBJECT (prefs);
+}
+
 static void
 rb_media_player_prefs_class_init (RBMediaPlayerPrefsClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+	object_class->constructor = rb_media_player_prefs_constructor;
 	object_class->dispose = rb_media_player_prefs_dispose;
 
 	g_type_class_add_private (klass, sizeof (RBMediaPlayerPrefsPrivate));
@@ -611,12 +625,11 @@ rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs, GError **error)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	g_return_val_if_fail (priv->key_file == NULL, priv->key_file);
+	g_return_val_if_fail (priv->key_file == NULL, FALSE);
 	
 	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
 	gchar *pathname = rb_find_user_data_file ("media-player-prefs.conf", NULL);
-	priv->key_file = g_key_file_new();
 	GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS;
 	
 	rb_debug ("loading iPod properties from \"%s\"", pathname);
@@ -629,7 +642,7 @@ rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs, GError **error)
 }
 
 RBMediaPlayerPrefs *
-rb_media_player_prefs_new (GKeyFile *key_file, const gchar *group )
+rb_media_player_prefs_new (GKeyFile **key_file, const gchar *group)
 {
 	g_return_val_if_fail (group != NULL, NULL);
 
@@ -641,9 +654,12 @@ rb_media_player_prefs_new (GKeyFile *key_file, const gchar *group )
 //	GError *error = NULL;
 	
 	// Load the key_file if it isn't already
-	priv->key_file = key_file;
+	g_assert(key_file != NULL);
+	
+	priv->key_file = *key_file;
 	priv->group = g_strdup(group);
-	if (!rb_media_player_prefs_load_file (prefs, NULL)) {
+	*key_file = rb_media_player_prefs_load_file (prefs, NULL);
+	if (!*key_file) {
 		// Could not load
 		g_object_unref (prefs);
 		return NULL;
@@ -679,6 +695,7 @@ rb_media_player_prefs_new (GKeyFile *key_file, const gchar *group )
 
      	return prefs;
 }
+
 gboolean
 rb_media_player_prefs_get_boolean ( RBMediaPlayerPrefs *prefs,
 			    guint pref_id )

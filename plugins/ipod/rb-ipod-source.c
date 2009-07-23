@@ -50,6 +50,7 @@
 #include "rb-util.h"
 #include "rhythmdb.h"
 #include "rb-cut-and-paste-code.h"
+#include "rb-media-player-source.h"
 #include "rb-media-player-prefs.h"
 #include "rb-playlist-source.h"
 #include "rb-playlist-manager.h"
@@ -104,6 +105,15 @@ static gchar * impl_get_serial (RBMediaPlayerSource *source);
 static gchar * impl_get_name (RBMediaPlayerSource *source);
 static void impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs);
 
+static void rb_ipod_source_set_property (GObject *object,
+					 guint prop_id,
+					 const GValue *value,
+					 GParamSpec *pspec);
+static void rb_ipod_source_get_property (GObject *object,
+					 guint prop_id,
+					 GValue *value,
+					 GParamSpec *pspec);
+
 static void connect_signal_handlers (RBiPodSource *source);
 static void disconnect_signal_handlers (RBiPodSource *source);
 
@@ -131,6 +141,8 @@ typedef struct
 
 	GQueue *offline_plays;
 	
+	GKeyFile **key_file; // for instantiating RBMediaPlayerPrefs*
+	
 } RBiPodSourcePrivate;
 
 typedef struct {
@@ -140,22 +152,31 @@ typedef struct {
 
 RB_PLUGIN_DEFINE_TYPE(RBiPodSource,
 		      rb_ipod_source,
-		      RB_TYPE_REMOVABLE_MEDIA_SOURCE)
+		      RB_TYPE_MEDIA_PLAYER_SOURCE)
 
 #define IPOD_SOURCE_GET_PRIVATE(o)   (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_IPOD_SOURCE, RBiPodSourcePrivate))
+
+enum
+{
+	PROP_0,
+	PROP_KEY_FILE
+};
 
 static void
 rb_ipod_source_class_init (RBiPodSourceClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 	RBSourceClass *source_class = RB_SOURCE_CLASS (klass);
+	RBMediaPlayerSourceClass *mps_class = RB_MEDIA_PLAYER_SOURCE_CLASS (klass);
 	RBRemovableMediaSourceClass *rms_class = RB_REMOVABLE_MEDIA_SOURCE_CLASS (klass);
 	RBBrowserSourceClass *browser_source_class = RB_BROWSER_SOURCE_CLASS (klass);
-	RBMediaPlayerSourceClass *mps_class = rb_ipod_source_parent_class;
 
 	object_class->constructor = rb_ipod_source_constructor;
 	object_class->dispose = rb_ipod_source_dispose;
-
+	
+	object_class->set_property = rb_ipod_source_set_property;
+	object_class->get_property = rb_ipod_source_get_property;
+	
 	source_class->impl_can_browse = (RBSourceFeatureFunc) rb_true_function;
 	source_class->impl_get_browser_key  = impl_get_browser_key;
 	source_class->impl_show_popup = impl_show_popup;
@@ -164,14 +185,7 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	source_class->impl_move_to_trash = impl_move_to_trash;
 	source_class->impl_can_rename = (RBSourceFeatureFunc) rb_true_function;
 	source_class->impl_get_ui_actions = impl_get_ui_actions;
-
 	source_class->impl_can_paste = (RBSourceFeatureFunc) rb_true_function;
-	rms_class->impl_should_paste = rb_removable_media_source_should_paste_no_duplicate;
-	rms_class->impl_track_added = impl_track_added;
-	rms_class->impl_build_dest_uri = impl_build_dest_uri;
-	rms_class->impl_get_mime_types = impl_get_mime_types;
-
-	browser_source_class->impl_get_paned_key = impl_get_paned_key;
 	
 	mps_class->impl_get_entries = impl_get_entries;
 	mps_class->impl_get_podcasts = impl_get_podcasts;
@@ -182,17 +196,22 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	mps_class->impl_get_name = impl_get_name;
 	mps_class->impl_show_properties = impl_show_properties;
 	
+	rms_class->impl_should_paste = rb_removable_media_source_should_paste_no_duplicate;
+	rms_class->impl_track_added = impl_track_added;
+	rms_class->impl_build_dest_uri = impl_build_dest_uri;
+	rms_class->impl_get_mime_types = impl_get_mime_types;
+
+	browser_source_class->impl_get_paned_key = impl_get_paned_key;
+	
 	g_object_class_install_property (object_class,
-					 0,
-					 g_param_spec_string ("key-file",
-							      "Key-File",
-							      "Pointer to the GKeyfile",
-							      NULL,
-							      G_PARAM_READWRITE));
+					 PROP_KEY_FILE,
+					 g_param_spec_pointer ("key-file",
+							       "key-file",
+							       "Pointer to the GKeyfile",
+							       G_PARAM_READWRITE));
 
 	g_type_class_add_private (klass, sizeof (RBiPodSourcePrivate));
 }
-
 
 static void
 rb_ipod_source_set_ipod_name (RBiPodSource *source, const char *name)
@@ -223,6 +242,42 @@ rb_ipod_source_init (RBiPodSource *source)
 {	
 }
 
+
+static void
+rb_ipod_source_set_property (GObject *object,
+			     guint prop_id,
+			     const GValue *value,
+			     GParamSpec *pspec)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_KEY_FILE:
+		priv->key_file = g_value_get_pointer (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
+}
+
+static void
+rb_ipod_source_get_property (GObject *object,
+			     guint prop_id,
+			     GValue *value,
+			     GParamSpec *pspec)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_KEY_FILE:
+		g_value_set_pointer (value, priv->key_file);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
+}
 
 static void
 connect_signal_handlers (RBiPodSource *source)
@@ -295,7 +350,7 @@ rb_ipod_source_dispose (GObject *object)
 		g_hash_table_destroy (priv->artwork_request_map);
 		priv->artwork_request_map = NULL;
  	}
-
+	
 	if (priv->artwork_notify_id) {
 		RhythmDB *db = get_db_for_source (RB_IPOD_SOURCE (object));
 		g_signal_handler_disconnect (db, priv->artwork_notify_id);
@@ -313,11 +368,11 @@ rb_ipod_source_dispose (GObject *object)
 	G_OBJECT_CLASS (rb_ipod_source_parent_class)->dispose (object);
 }
 
-RBRemovableMediaSource *
+RBMediaPlayerSource *
 rb_ipod_source_new (RBPlugin *plugin,
 		    RBShell *shell,
 		    GMount *mount,
-		    GKeyFile *key_file)
+		    GKeyFile **key_file)
 {
 	RBiPodSource *source;
 	RhythmDBEntryType entry_type;
@@ -351,7 +406,7 @@ rb_ipod_source_new (RBPlugin *plugin,
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);
         g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
 
-	return RB_REMOVABLE_MEDIA_SOURCE (source);
+	return RB_MEDIA_PLAYER_SOURCE (source);
 }
 
 static void

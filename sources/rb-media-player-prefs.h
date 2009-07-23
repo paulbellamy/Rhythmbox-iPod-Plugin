@@ -64,7 +64,7 @@ typedef struct
 	GObjectClass parent;
 } RBMediaPlayerPrefsClass;
 
-RBMediaPlayerPrefs *rb_media_player_prefs_new (GKeyFile *key_file, const gchar *group );
+RBMediaPlayerPrefs *rb_media_player_prefs_new (GKeyFile **key_file, const gchar *group );
 GType rb_media_player_prefs_get_type (void);
 
 void	 rb_media_player_prefs_update_sync	( RBMediaPlayerPrefs *prefs );
