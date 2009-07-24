@@ -46,12 +46,12 @@ G_DEFINE_TYPE (RBMediaPlayerSource, rb_media_player_source, RB_TYPE_REMOVABLE_ME
 
 #define MEDIA_PLAYER_SOURCE_GET_PRIVATE(o)   (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_MEDIA_PLAYER_SOURCE, RBMediaPlayerSourcePrivate))
 
+static void rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass);
 static GObject *rb_media_player_source_constructor (GType type, 
 					    guint n_construct_properties,
 					    GObjectConstructParam *construct_properties);
-static void rb_media_player_source_dispose (GObject *object);
-static void rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass);
 static void rb_media_player_source_init (RBMediaPlayerSource *self);
+static void rb_media_player_source_dispose (GObject *object);
 
 static void connect_signal_handlers (GObject *source);
 static void disconnect_signal_handlers (GObject *source);
@@ -79,34 +79,6 @@ enum
 	PROP_KEY_FILE
 };
 
-static GObject *
-rb_media_player_source_constructor (GType type, 
-				    guint n_construct_properties,
-				    GObjectConstructParam *construct_properties)
-{
-	GObject *source;
-	
-	source = G_OBJECT_CLASS(rb_media_player_source_parent_class)
-				->constructor (type, n_construct_properties, construct_properties);
-	
-	return G_OBJECT (source);
-}
-
-static void
-rb_media_player_source_dispose (GObject *object)
-{
-	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (object);
-	
-	disconnect_signal_handlers (object);
-	
-	if (priv->prefs) {
-		g_object_unref (G_OBJECT (priv->prefs));
-		priv->prefs = NULL;
-	}
-	
-	G_OBJECT_CLASS (rb_media_player_source_parent_class)->dispose (object);
-}
-
 static void
 rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 {
@@ -133,22 +105,50 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 					 g_param_spec_pointer ("key-file",
 							       "key-file",
 							       "Pointer to the GKeyfile",
-							       G_PARAM_READWRITE));
+							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 	
 	g_type_class_add_private (klass, sizeof (RBMediaPlayerSourcePrivate));
+}
+
+static GObject *
+rb_media_player_source_constructor (GType type, 
+				    guint n_construct_properties,
+				    GObjectConstructParam *construct_properties)
+{
+	GObject *source;
+	
+	source = G_OBJECT_CLASS(rb_media_player_source_parent_class)
+				->constructor (type, n_construct_properties, construct_properties);
+	
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	
+	priv->prefs = rb_media_player_prefs_new ( priv->key_file,
+						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (source) ) );
+	
+	connect_signal_handlers (G_OBJECT (source));
+	
+	return G_OBJECT (source);
+}
+
+static void
+rb_media_player_source_dispose (GObject *object)
+{
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (object);
+	
+	disconnect_signal_handlers (object);
+	
+	if (priv->prefs) {
+		g_object_unref (G_OBJECT (priv->prefs));
+		priv->prefs = NULL;
+	}
+	
+	G_OBJECT_CLASS (rb_media_player_source_parent_class)->dispose (object);
 }
 
 static void
 rb_media_player_source_init (RBMediaPlayerSource *self)
 {
 	/* initialize the object */
-	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (self);
-	GKeyFile **key_file;
-	g_object_get(self, "key-file", &key_file, NULL);
-	priv->prefs = rb_media_player_prefs_new ( key_file,
-						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (self) ) );
-	
-	connect_signal_handlers (G_OBJECT (self));
 }
 
 static void

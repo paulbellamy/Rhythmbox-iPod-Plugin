@@ -177,7 +177,7 @@ impl_activate (RBPlugin *bplugin,
 		      "ui-manager", &uimanager,
 		      NULL);
 		      
-	plugin->key_file = (GKeyFile *)0x12345;
+	plugin->key_file = NULL;
 
 	/* add ipod UI */
 	plugin->action_group = gtk_action_group_new ("iPodActions");

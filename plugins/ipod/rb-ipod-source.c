@@ -59,6 +59,7 @@
 #define CONF_STATE_PANED_POSITION CONF_PREFIX "/state/ipod/paned_position"
 #define CONF_STATE_SHOW_BROWSER   CONF_PREFIX "/state/ipod/show_browser"
 
+static void rb_ipod_source_class_init (RBiPodSourceClass *klass);
 static GObject *rb_ipod_source_constructor (GType type, 
 					    guint n_construct_properties,
 					    GObjectConstructParam *construct_properties);

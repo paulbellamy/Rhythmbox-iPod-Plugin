@@ -200,7 +200,7 @@ track_equal_func (gconstpointer v1,
 		  gconstpointer v2)
 {
 	/* This function is for telling if two tracks are identical.
-	 * It ignores URI and file_name because that will be different on the iPod and the Library.
+	 * It ignores URI and file_name because that will be different on the device and the Library.
 	 */
 	if (g_strcmp0(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE)) != 0)
 		return FALSE;
@@ -378,12 +378,7 @@ rb_media_player_prefs_calculate_space_needed (RBMediaPlayerPrefs *prefs)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	GList * list_iter;
-	/* FIXME: Get capacity here - Paul Bellamy
-	const gchar *mount_point = rb_removable_media_source_get_mount_point (priv->source);
-	
-	priv->sync_space_needed = rb_ipod_helpers_get_capacity (mount_point) - rb_ipod_helpers_get_free_space (mount_point);
-	*/
-	priv->sync_space_needed = 0;
+	priv->sync_space_needed = rb_media_player_source_get_capacity (priv->source);
 	
 	for (list_iter = priv->sync_to_add; list_iter; list_iter = list_iter->next) {		
 		priv->sync_space_needed += rhythmdb_entry_get_uint64 ( list_iter->data,
@@ -520,8 +515,8 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	GHashTable *itinerary_hash = g_hash_table_new (track_hash_func, track_equal_func);
 	GHashTable *device_hash = g_hash_table_new (track_hash_func, track_equal_func);
-	GList	*to_add = NULL; // Files to go onto the iPod
-	GList	*to_remove = NULL; // Files to be removed from the iPod
+	GList	*to_add = NULL; // Files to go onto the device
+	GList	*to_remove = NULL; // Files to be removed from the device
 	HashTableComparisonData comparison_data;
 	
 	/* Build itinerary_hash */
@@ -599,11 +594,11 @@ rb_media_player_prefs_save_file (RBMediaPlayerPrefs *prefs, GError **error)
 					   &length,
 					   error);
 		if (error != NULL) {
-			rb_debug ("unable to save iPod properties: %s", (*error)->message);
+			rb_debug ("unable to save Media Player properties: %s", (*error)->message);
 			return FALSE;
 		}
 		
-		g_file_set_contents (rb_find_user_data_file ("ipod-prefs.conf", NULL),
+		g_file_set_contents (rb_find_user_data_file ("media-player-prefs.conf", NULL),
 				     data,
 				     length,
 				     error);
@@ -611,7 +606,7 @@ rb_media_player_prefs_save_file (RBMediaPlayerPrefs *prefs, GError **error)
 		g_free (data);
 		
 		if (error != NULL) {
-			rb_debug ("unable to save iPod properties: %s", (*error)->message);
+			rb_debug ("unable to save Media Player properties: %s", (*error)->message);
 			return FALSE;
 		}
 		
@@ -625,16 +620,30 @@ rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs, GError **error)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	g_return_val_if_fail (priv->key_file == NULL, FALSE);
-	
 	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-	gchar *pathname = rb_find_user_data_file ("media-player-prefs.conf", NULL);
+	if (priv->key_file != NULL) {
+		return priv->key_file;
+	}
+	
+	priv->key_file = g_key_file_new();
+	
+	gchar *pathname = rb_find_user_data_file ("media-player-prefs.conf", error);
+	if (error != NULL) {
+		rb_debug ("unable to find media-player-prefs.conf: %s", (*error)->message);
+		g_key_file_free (priv->key_file);
+		priv->key_file = NULL;
+		return NULL;
+	}
+	
 	GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS;
 	
-	rb_debug ("loading iPod properties from \"%s\"", pathname);
+//g_print("pathname = %s\n", pathname);
+//g_print("priv->key_file = %p\n", priv->key_file);
+	
+	rb_debug ("loading Media Player properties from \"%s\"", pathname);
 	if ( !g_key_file_load_from_file (priv->key_file, pathname, flags, error) ) {
-		rb_debug ("unable to load iPod properties: %s", (*error)->message);
+		rb_debug ("unable to load Media Player properties: %s", (*error)->message);
 	}
 	
 	g_free(pathname);
