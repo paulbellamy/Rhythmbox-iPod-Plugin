@@ -60,6 +60,7 @@ typedef struct
 	GHashTable *	(*impl_get_entries)	(RBMediaPlayerSource *source);
 	GHashTable *	(*impl_get_podcasts)	(RBMediaPlayerSource *source);
 	guint64		(*impl_get_capacity)	(RBMediaPlayerSource *source);
+	guint64		(*impl_get_free_space)	(RBMediaPlayerSource *source);
 	void		(*impl_add_entries)	(RBMediaPlayerSource *source, GList *entries);
 	void		(*impl_trash_entries)	(RBMediaPlayerSource *source, GList *entries);
 	gchar *		(*impl_get_serial)	(RBMediaPlayerSource *source);
@@ -75,6 +76,7 @@ GHashTable * rb_media_player_source_get_entries (RBMediaPlayerSource *source);
 GHashTable * rb_media_player_source_get_podcasts (RBMediaPlayerSource *source);
 
 guint64	rb_media_player_source_get_capacity (RBMediaPlayerSource *source);
+guint64 rb_media_player_source_get_free_space (RBMediaPlayerSource *source);
 
 void	rb_media_player_source_add_entries	(RBMediaPlayerSource *source,
 						 GList *entries);

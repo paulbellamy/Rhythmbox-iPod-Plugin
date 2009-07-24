@@ -97,7 +97,7 @@ static gboolean rb_ipod_song_artwork_add_cb (RhythmDB *db,
                                              RBiPodSource *isource);
                                              
 static guint64 impl_get_capacity (RBMediaPlayerSource *source);
-
+static guint64 impl_get_free_space (RBMediaPlayerSource *source);
 static GHashTable * impl_get_entries (RBMediaPlayerSource *source);
 static GHashTable * impl_get_podcasts (RBMediaPlayerSource *source);
 static void impl_add_entries (RBMediaPlayerSource *source, GList *entries);
@@ -171,6 +171,7 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	mps_class->impl_get_entries = impl_get_entries;
 	mps_class->impl_get_podcasts = impl_get_podcasts;
 	mps_class->impl_get_capacity = impl_get_capacity;
+	mps_class->impl_get_free_space = impl_get_free_space;
 	mps_class->impl_add_entries = impl_add_entries;
 	mps_class->impl_trash_entries = impl_trash_entries;
 	mps_class->impl_get_serial = impl_get_serial;
@@ -2016,7 +2017,7 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	entries_changed_data->tree_view = GTK_TREE_VIEW (label);
 	entries_changed_data->mp = mp;
 		
-	g_object_get (source, "shell", &shell, NULL);
+	g_object_get (RB_SOURCE (source), "shell", &shell, NULL);
 	g_object_get (shell, "db", &library_db, NULL);
 	
 	// Set up the treestore
@@ -2152,6 +2153,12 @@ impl_get_capacity (RBMediaPlayerSource *source)
 {
 	return get_fs_property (rb_ipod_source_get_mount_point ((RBiPodSource *)source),
         			G_FILE_ATTRIBUTE_FILESYSTEM_SIZE);
+}
+
+static guint64
+impl_get_free_space (RBMediaPlayerSource *source) {
+	return get_fs_property (rb_ipod_source_get_mount_point ((RBiPodSource *)source),
+				G_FILE_ATTRIBUTE_FILESYSTEM_FREE);
 }
 
 /* Podcasts and Tracks on the iPod have the same entry-type

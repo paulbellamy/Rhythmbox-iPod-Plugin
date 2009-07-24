@@ -378,7 +378,8 @@ rb_media_player_prefs_calculate_space_needed (RBMediaPlayerPrefs *prefs)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	GList * list_iter;
-	priv->sync_space_needed = rb_media_player_source_get_capacity (priv->source);
+	priv->sync_space_needed = rb_media_player_source_get_capacity( priv->source )
+					 - rb_media_player_source_get_free_space (priv->source);
 	
 	for (list_iter = priv->sync_to_add; list_iter; list_iter = list_iter->next) {		
 		priv->sync_space_needed += rhythmdb_entry_get_uint64 ( list_iter->data,
@@ -391,7 +392,7 @@ rb_media_player_prefs_calculate_space_needed (RBMediaPlayerPrefs *prefs)
 	}
 	
 	// DEBUGGING
-	g_print("Space Needed: %s\n", g_format_size_for_display (priv->sync_space_needed));
+	//g_print("Space Needed: %s\n", g_format_size_for_display (priv->sync_space_needed));
 	
 	return priv->sync_space_needed;
 }
@@ -618,59 +619,54 @@ rb_media_player_prefs_save_file (RBMediaPlayerPrefs *prefs, GError **error)
 static GKeyFile *
 rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs, GError **error)
 {
-	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
-	
 	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-	if (priv->key_file != NULL) {
-		return priv->key_file;
-	}
-	
-	priv->key_file = g_key_file_new();
-	
-	gchar *pathname = rb_find_user_data_file ("media-player-prefs.conf", error);
-	if (error != NULL) {
-		rb_debug ("unable to find media-player-prefs.conf: %s", (*error)->message);
-		g_key_file_free (priv->key_file);
-		priv->key_file = NULL;
-		return NULL;
-	}
-	
+	gchar *pathname = rb_find_user_data_file ("media-player-prefs.conf", NULL);
+	GKeyFile *key_file = g_key_file_new();
 	GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS;
 	
-//g_print("pathname = %s\n", pathname);
-//g_print("priv->key_file = %p\n", priv->key_file);
-	
-	rb_debug ("loading Media Player properties from \"%s\"", pathname);
-	if ( !g_key_file_load_from_file (priv->key_file, pathname, flags, error) ) {
-		rb_debug ("unable to load Media Player properties: %s", (*error)->message);
+	rb_debug ("loading device properties from \"%s\"", pathname);
+	if ( !g_key_file_load_from_file (key_file, pathname, flags, error) ) {
+		rb_debug ("unable to load device properties: %s", (*error)->message);
 	}
 	
 	g_free(pathname);
-	return priv->key_file;
+	return key_file;
 }
 
 RBMediaPlayerPrefs *
-rb_media_player_prefs_new (GKeyFile **key_file, const gchar *group)
+rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 {
 	g_return_val_if_fail (key_file != NULL, NULL);
-	g_return_val_if_fail (group != NULL, NULL);
+	g_return_val_if_fail (source != NULL, NULL);
 
 	RBMediaPlayerPrefs *prefs = g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS, NULL);
 	
 	g_return_val_if_fail (prefs != NULL, NULL);
 	
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
-//	GError *error = NULL;
+	GError *error = NULL;
+	
+	g_object_get (source, "shell", &priv->shell, NULL);
+	g_object_get (priv->shell, "db", &priv->db, NULL);
+	priv->source = RB_MEDIA_PLAYER_SOURCE (source);
 	
 	// Load the key_file if it isn't already
+	if (*key_file == NULL)
+		*key_file = rb_media_player_prefs_load_file(prefs, &error);
+	
 	priv->key_file = *key_file;
-	priv->group = g_strdup(group);
-	*key_file = rb_media_player_prefs_load_file (prefs, NULL);
-	if (!*key_file) {
-		// Could not load
-		g_object_unref (prefs);
+	
+	if (priv->key_file == NULL) {
+		g_object_unref (G_OBJECT (prefs));
+		prefs = NULL;
 		return NULL;
+	}
+	
+	priv->group = rb_media_player_source_get_serial ( RB_MEDIA_PLAYER_SOURCE (source) );
+	if (priv->group == NULL) {
+		// Couldn't get the serial, use the ipod name
+		priv->group = g_strdup(rb_media_player_source_get_name ( RB_MEDIA_PLAYER_SOURCE (source) ) );
 	}
 	
 	// add the group and keys, unless it exists

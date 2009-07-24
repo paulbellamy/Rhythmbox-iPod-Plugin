@@ -94,6 +94,7 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 	klass->impl_get_entries = NULL;
 	klass->impl_get_podcasts = NULL;
 	klass->impl_get_capacity = NULL;
+	klass->impl_get_free_space = NULL;
 	klass->impl_add_entries = NULL;
 	klass->impl_trash_entries = NULL;
 	klass->impl_get_serial = NULL;
@@ -123,7 +124,7 @@ rb_media_player_source_constructor (GType type,
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
 	priv->prefs = rb_media_player_prefs_new ( priv->key_file,
-						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (source) ) );
+						  G_OBJECT (source) );
 	
 	connect_signal_handlers (G_OBJECT (source));
 	
@@ -209,6 +210,14 @@ rb_media_player_source_get_capacity (RBMediaPlayerSource *source)
 	RBMediaPlayerSourceClass *klass = RB_MEDIA_PLAYER_SOURCE_GET_CLASS (source);
 
 	return klass->impl_get_capacity (source);
+}
+
+guint64
+rb_media_player_source_get_free_space (RBMediaPlayerSource *source)
+{
+	RBMediaPlayerSourceClass *klass = RB_MEDIA_PLAYER_SOURCE_GET_CLASS (source);
+
+	return klass->impl_get_free_space (source);
 }
 
 void
