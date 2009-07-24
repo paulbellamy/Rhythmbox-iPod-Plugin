@@ -37,6 +37,8 @@
 typedef struct {
 	RBMediaPlayerPrefs *prefs;
 	
+	GKeyFile **key_file;
+	
 } RBMediaPlayerSourcePrivate;
 
 /* macro to create rb_media_player_source_get_type and set rb_media_player_source_parent_class */
@@ -54,6 +56,15 @@ static void rb_media_player_source_init (RBMediaPlayerSource *self);
 static void connect_signal_handlers (GObject *source);
 static void disconnect_signal_handlers (GObject *source);
 
+static void rb_media_player_source_set_property (GObject *object,
+					 guint prop_id,
+					 const GValue *value,
+					 GParamSpec *pspec);
+static void rb_media_player_source_get_property (GObject *object,
+					 guint prop_id,
+					 GValue *value,
+					 GParamSpec *pspec);
+
 static void auto_sync_cb_with_changes (RhythmDB *db,
 			   	       RhythmDBEntry *entry,
 			   	       GSList *changes,
@@ -61,6 +72,12 @@ static void auto_sync_cb_with_changes (RhythmDB *db,
 static void auto_sync_cb (RhythmDB *db,
 			  RhythmDBEntry *entry,
 			  RBMediaPlayerSource *source);
+
+enum
+{
+	PROP_0,
+	PROP_KEY_FILE
+};
 
 static GObject *
 rb_media_player_source_constructor (GType type, 
@@ -71,14 +88,6 @@ rb_media_player_source_constructor (GType type,
 	
 	source = G_OBJECT_CLASS(rb_media_player_source_parent_class)
 				->constructor (type, n_construct_properties, construct_properties);
-	
-	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
-	GKeyFile **key_file;
-	g_object_get(source, "key-file", &key_file, NULL);
-	priv->prefs = rb_media_player_prefs_new ( key_file,
-						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (source) ) );
-	
-	connect_signal_handlers (source);
 	
 	return G_OBJECT (source);
 }
@@ -106,6 +115,9 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 	object_class->constructor = rb_media_player_source_constructor;
 	object_class->dispose = rb_media_player_source_dispose;
 	
+	object_class->set_property = rb_media_player_source_set_property;
+	object_class->get_property = rb_media_player_source_get_property;
+	
 	/* pure virtual methods: mandates implementation in children. */
 	klass->impl_get_entries = NULL;
 	klass->impl_get_podcasts = NULL;
@@ -116,6 +128,13 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 	klass->impl_get_name = NULL;
 	klass->impl_show_properties = NULL;
 	
+	g_object_class_install_property (object_class,
+					 PROP_KEY_FILE,
+					 g_param_spec_pointer ("key-file",
+							       "key-file",
+							       "Pointer to the GKeyfile",
+							       G_PARAM_READWRITE));
+	
 	g_type_class_add_private (klass, sizeof (RBMediaPlayerSourcePrivate));
 }
 
@@ -123,6 +142,49 @@ static void
 rb_media_player_source_init (RBMediaPlayerSource *self)
 {
 	/* initialize the object */
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (self);
+	GKeyFile **key_file;
+	g_object_get(self, "key-file", &key_file, NULL);
+	priv->prefs = rb_media_player_prefs_new ( key_file,
+						  rb_media_player_source_get_serial (RB_MEDIA_PLAYER_SOURCE (self) ) );
+	
+	connect_signal_handlers (G_OBJECT (self));
+}
+
+static void
+rb_media_player_source_set_property (GObject *object,
+			     guint prop_id,
+			     const GValue *value,
+			     GParamSpec *pspec)
+{
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_KEY_FILE:
+		priv->key_file = g_value_get_pointer (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
+}
+
+static void
+rb_media_player_source_get_property (GObject *object,
+			     guint prop_id,
+			     GValue *value,
+			     GParamSpec *pspec)
+{
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_KEY_FILE:
+		g_value_set_pointer (value, priv->key_file);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
 }
 
 GHashTable *

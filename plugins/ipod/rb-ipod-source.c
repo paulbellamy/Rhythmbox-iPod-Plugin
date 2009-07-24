@@ -105,15 +105,6 @@ static gchar * impl_get_serial (RBMediaPlayerSource *source);
 static gchar * impl_get_name (RBMediaPlayerSource *source);
 static void impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs);
 
-static void rb_ipod_source_set_property (GObject *object,
-					 guint prop_id,
-					 const GValue *value,
-					 GParamSpec *pspec);
-static void rb_ipod_source_get_property (GObject *object,
-					 guint prop_id,
-					 GValue *value,
-					 GParamSpec *pspec);
-
 static void connect_signal_handlers (RBiPodSource *source);
 static void disconnect_signal_handlers (RBiPodSource *source);
 
@@ -141,8 +132,6 @@ typedef struct
 
 	GQueue *offline_plays;
 	
-	GKeyFile **key_file; // for instantiating RBMediaPlayerPrefs*
-	
 } RBiPodSourcePrivate;
 
 typedef struct {
@@ -156,12 +145,6 @@ RB_PLUGIN_DEFINE_TYPE(RBiPodSource,
 
 #define IPOD_SOURCE_GET_PRIVATE(o)   (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_IPOD_SOURCE, RBiPodSourcePrivate))
 
-enum
-{
-	PROP_0,
-	PROP_KEY_FILE
-};
-
 static void
 rb_ipod_source_class_init (RBiPodSourceClass *klass)
 {
@@ -173,9 +156,6 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 
 	object_class->constructor = rb_ipod_source_constructor;
 	object_class->dispose = rb_ipod_source_dispose;
-	
-	object_class->set_property = rb_ipod_source_set_property;
-	object_class->get_property = rb_ipod_source_get_property;
 	
 	source_class->impl_can_browse = (RBSourceFeatureFunc) rb_true_function;
 	source_class->impl_get_browser_key  = impl_get_browser_key;
@@ -202,13 +182,6 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	rms_class->impl_get_mime_types = impl_get_mime_types;
 
 	browser_source_class->impl_get_paned_key = impl_get_paned_key;
-	
-	g_object_class_install_property (object_class,
-					 PROP_KEY_FILE,
-					 g_param_spec_pointer ("key-file",
-							       "key-file",
-							       "Pointer to the GKeyfile",
-							       G_PARAM_READWRITE));
 
 	g_type_class_add_private (klass, sizeof (RBiPodSourcePrivate));
 }
@@ -240,43 +213,6 @@ rb_ipod_source_name_changed_cb (RBiPodSource *source, GParamSpec *spec,
 static void
 rb_ipod_source_init (RBiPodSource *source)
 {	
-}
-
-
-static void
-rb_ipod_source_set_property (GObject *object,
-			     guint prop_id,
-			     const GValue *value,
-			     GParamSpec *pspec)
-{
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (object);
-
-	switch (prop_id) {
-	case PROP_KEY_FILE:
-		priv->key_file = g_value_get_pointer (value);
-		break;
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-		break;
-	}
-}
-
-static void
-rb_ipod_source_get_property (GObject *object,
-			     guint prop_id,
-			     GValue *value,
-			     GParamSpec *pspec)
-{
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (object);
-
-	switch (prop_id) {
-	case PROP_KEY_FILE:
-		g_value_set_pointer (value, priv->key_file);
-		break;
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-		break;
-	}
 }
 
 static void

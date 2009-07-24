@@ -644,6 +644,7 @@ rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs, GError **error)
 RBMediaPlayerPrefs *
 rb_media_player_prefs_new (GKeyFile **key_file, const gchar *group)
 {
+	g_return_val_if_fail (key_file != NULL, NULL);
 	g_return_val_if_fail (group != NULL, NULL);
 
 	RBMediaPlayerPrefs *prefs = g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS, NULL);
@@ -654,8 +655,6 @@ rb_media_player_prefs_new (GKeyFile **key_file, const gchar *group)
 //	GError *error = NULL;
 	
 	// Load the key_file if it isn't already
-	g_assert(key_file != NULL);
-	
 	priv->key_file = *key_file;
 	priv->group = g_strdup(group);
 	*key_file = rb_media_player_prefs_load_file (prefs, NULL);
