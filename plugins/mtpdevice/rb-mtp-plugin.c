@@ -73,6 +73,8 @@ typedef struct
 
 	LibHalContext *hal_context;
 	DBusConnection *dbus_connection;
+	
+	GKeyFile *key_file;
 } RBMtpPlugin;
 
 typedef struct
@@ -105,7 +107,7 @@ RB_PLUGIN_REGISTER(RBMtpPlugin, rb_mtp_plugin)
 
 static GtkActionEntry rb_mtp_plugin_actions [] =
 {
-	{ "MTPSourceSync", GTK_STOCK_REFRESH, N_("Sync"), NULL,
+	{ "MTPSourceSync", GTK_STOCK_REFRESH, N_("_Sync"), NULL,
 	  N_("Sync MTP-device"),
 	  G_CALLBACK (rb_mtp_plugin_sync) },
 	{ "MTPSourceEject", GNOME_MEDIA_EJECT, N_("_Eject"), NULL,
@@ -168,6 +170,8 @@ impl_activate (RBPlugin *bplugin, RBShell *shell)
 	g_object_get (G_OBJECT (shell),
 		     "ui-manager", &uimanager,
 		     NULL);
+		     
+	plugin->key_file = NULL;
 
 	/* ui */
 	plugin->action_group = gtk_action_group_new ("MTPActions");
@@ -254,6 +258,11 @@ impl_deactivate (RBPlugin *bplugin, RBShell *shell)
 		dbus_connection_unref (plugin->dbus_connection);
 		plugin->dbus_connection = NULL;
 	}
+	
+	if (plugin->key_file) {
+		g_key_file_free ( plugin->key_file );
+		plugin->key_file = NULL;
+	}
 
 	g_object_unref (G_OBJECT (uimanager));
 }
@@ -269,7 +278,7 @@ create_source_cb (RBMtpPlugin *plugin, LIBMTP_mtpdevice_t *device, const char *u
 {
 	RBSource *source;
 
-	source = RB_SOURCE (rb_mtp_source_new (plugin->shell, device, udi));
+	source = RB_SOURCE (rb_mtp_source_new (RB_PLUGIN (plugin), plugin->shell, device, udi, &plugin->key_file));
 
 	rb_shell_append_source (plugin->shell, source, NULL);
 	plugin->mtp_sources = g_list_prepend (plugin->mtp_sources, source);
@@ -310,9 +319,18 @@ static void
 rb_mtp_plugin_sync (GtkAction *action,
 			RBMtpPlugin *plugin)
 {
-	/* FIXME: Stub
-	 *
-	 */
+	RBSource *source = NULL;
+
+	g_object_get (G_OBJECT (plugin->shell), 
+		      "selected-source", &source,
+		      NULL);
+	if ((source == NULL) || !RB_IS_MTP_SOURCE (source)) {
+		g_critical ("got MtpSourceSync action for non-MTP source");
+		return;
+	}
+
+	rb_media_player_source_sync (RB_MEDIA_PLAYER_SOURCE (source));
+	g_object_unref (G_OBJECT (source));
 }
 
 
@@ -330,7 +348,7 @@ rb_mtp_plugin_properties (GtkAction *action,
 		return;
 	}
 
-	rb_mtp_source_show_properties (RB_MTP_SOURCE (source));
+	rb_media_player_source_show_properties (RB_MEDIA_PLAYER_SOURCE (source));
 	g_object_unref (G_OBJECT (source));
 }
 

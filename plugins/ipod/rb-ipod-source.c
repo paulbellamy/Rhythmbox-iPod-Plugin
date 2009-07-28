@@ -1987,7 +1987,6 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_free (capacity);
 	g_free (used);
 	
-	/* Not done with this, just a placeholder for now. -Paul B. */
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-auto");
 	// Needs to be on if rb_ipod_helpers_get_autosync
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
@@ -1995,8 +1994,6 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
  	g_signal_connect (label, "toggled",
  			  (GCallback)rb_ipod_sync_auto_changed_cb, prefs);
 	
-	/* FIXME: Needs to set up the treeview here, also
-	 */
 	// Set tree models for each treeview
 	// tree_store columns are: Active, Name, Activatable
 	GtkTreeStore *tree_store = gtk_tree_store_new (3, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
@@ -2169,7 +2166,7 @@ static GHashTable *
 impl_get_podcasts	(RBMediaPlayerSource *source)
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	GHashTable *result = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
 	GHashTableIter iter;
 	gpointer key, value;
 	
@@ -2190,7 +2187,7 @@ static GHashTable *
 impl_get_entries	(RBMediaPlayerSource *source)
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	GHashTable *result = g_hash_table_new (rb_ipod_helpers_track_hash, rb_ipod_helpers_track_equal);
+	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
 	GHashTableIter iter;
 	gpointer key, value;
 	

@@ -39,6 +39,7 @@
 #include "rb-debug.h"
 #include "rb-file-helpers.h"
 #include "rb-plugin.h"
+#include "rb-builder-helpers.h"
 #include "rb-removable-media-manager.h"
 #include "rb-static-playlist-source.h"
 #include "rb-util.h"
@@ -130,21 +131,23 @@ static void artwork_notify_cb (RhythmDB *db,
 			       const GValue *metadata,
 			       RBMtpSource *source);
 
-/**
- * Commented out because there is no "Properties" pane for MTP devices
- * yet, so these functions are unused. - Paul.B
- *
+static void rb_mtp_info_response_cb (GtkDialog *dialog,
+				     int response_id,
+				     RBMtpSource *source);
 
-static gboolean impl_get_sync_auto (RBMtpSource *source);
-static void impl_set_sync_auto (RBMtpSource *source,
-				gboolean value);
-static gboolean impl_get_sync_music (RBMtpSource *source);
-static void impl_set_sync_music (RBMtpSource *source,
-				 gboolean value);
-static gboolean impl_get_sync_podcasts (RBMtpSource *source);
-static void impl_set_sync_podcasts (RBMtpSource *source,
-				    gboolean value);
-*/
+static void rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
+					 gpointer         user_data);
+
+static GHashTable *	impl_get_entries	(RBMediaPlayerSource *source);
+static GHashTable *	impl_get_podcasts	(RBMediaPlayerSource *source);
+static guint64		impl_get_capacity	(RBMediaPlayerSource *source);
+static guint64		impl_get_free_space	(RBMediaPlayerSource *source);
+static void		impl_add_entries	(RBMediaPlayerSource *source, GList *entries);
+static void		impl_trash_entry	(RBMediaPlayerSource *source, RhythmDBEntry *entry);
+static void		impl_trash_entries	(RBMediaPlayerSource *source, GList *entries);
+static gchar *		impl_get_serial		(RBMediaPlayerSource *source);
+static gchar *		impl_get_name		(RBMediaPlayerSource *source);
+static void		impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs);
 
 static void add_track_to_album (RBMtpSource *source, const char *album_name, LIBMTP_track_t *track);
 
@@ -173,7 +176,7 @@ typedef struct
 
 RB_PLUGIN_DEFINE_TYPE(RBMtpSource,
 		       rb_mtp_source,
-		       RB_TYPE_REMOVABLE_MEDIA_SOURCE)
+		       RB_TYPE_MEDIA_PLAYER_SOURCE)
 
 #define MTP_SOURCE_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_MTP_SOURCE, RBMtpSourcePrivate))
 
@@ -210,6 +213,7 @@ rb_mtp_source_class_init (RBMtpSourceClass *klass)
 	RBSourceClass *source_class = RB_SOURCE_CLASS (klass);
 	RBRemovableMediaSourceClass *rms_class = RB_REMOVABLE_MEDIA_SOURCE_CLASS (klass);
 	RBBrowserSourceClass *browser_source_class = RB_BROWSER_SOURCE_CLASS (klass);
+	RBMediaPlayerSourceClass *mps_class = RB_MEDIA_PLAYER_SOURCE_CLASS (klass);
 
 	object_class->constructor = rb_mtp_source_constructor;
 	object_class->dispose = rb_mtp_source_dispose;
@@ -237,6 +241,16 @@ rb_mtp_source_class_init (RBMtpSourceClass *klass)
 	rms_class->impl_build_dest_uri = impl_build_dest_uri;
 	rms_class->impl_get_mime_types = impl_get_mime_types;
 	rms_class->impl_should_paste = rb_removable_media_source_should_paste_no_duplicate;
+	
+	mps_class->impl_get_entries = impl_get_entries;
+	mps_class->impl_get_podcasts = impl_get_podcasts;
+	mps_class->impl_get_capacity = impl_get_capacity;
+	mps_class->impl_get_free_space = impl_get_free_space;
+	mps_class->impl_add_entries = impl_add_entries;
+	mps_class->impl_trash_entries = impl_trash_entries;
+	mps_class->impl_get_serial = impl_get_serial;
+	mps_class->impl_get_name = impl_get_name;
+	mps_class->impl_show_properties = impl_show_properties;
 
 	g_object_class_install_property (object_class,
 					 PROP_LIBMTP_DEVICE,
@@ -523,9 +537,11 @@ impl_get_paned_key (RBBrowserSource *source)
 }
 
 RBBrowserSource *
-rb_mtp_source_new (RBShell *shell,
+rb_mtp_source_new (RBPlugin *plugin,
+		   RBShell *shell,
 		   LIBMTP_mtpdevice_t *device,
-		   const char *udi)
+		   const char *udi,
+		   GKeyFile **key_file)
 {
 	RBMtpSource *source = NULL;
 	RhythmDBEntryType entry_type;
@@ -543,6 +559,7 @@ rb_mtp_source_new (RBShell *shell,
 	g_object_unref (db);
 
 	source = RB_MTP_SOURCE (g_object_new (RB_TYPE_MTP_SOURCE,
+					      "plugin", plugin,
 					      "entry-type", entry_type,
 					      "shell", shell,
 					      "visibility", TRUE,
@@ -550,6 +567,7 @@ rb_mtp_source_new (RBShell *shell,
 					      "source-group", RB_SOURCE_GROUP_DEVICES,
 					      "libmtp-device", device,
 					      "udi", udi,
+					      "key-file", key_file,
 					      NULL));
 
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);
@@ -760,15 +778,7 @@ rb_mtp_source_load_tracks (RBMtpSource *source)
 	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
 	char *name = NULL;
 
-	name = LIBMTP_Get_Friendlyname (priv->device);
-	/* ignore some particular broken device names */
-	if (name == NULL || strcmp (name, "?????") == 0) {
-		g_free (name);
-		name = LIBMTP_Get_Modelname (priv->device);
-	}
-	if (name == NULL) {
-		name = g_strdup (_("Digital Audio Player"));
-	}
+	name = impl_get_name (RB_MEDIA_PLAYER_SOURCE (source));
 
 	g_object_set (RB_SOURCE (source),
 		      "name", name,
@@ -908,50 +918,15 @@ remove_track_from_album (RBMtpSource *source, const char *album_name, LIBMTP_tra
 static void
 impl_delete (RBSource *source)
 {
-	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
 	GList *sel;
-	GList *tem;
 	RBEntryView *tracks;
-	RhythmDB *db;
-	int ret;
-
-	db = get_db_for_source (RB_MTP_SOURCE (source));
 
 	tracks = rb_source_get_entry_view (source);
 	sel = rb_entry_view_get_selected_entries (tracks);
-	for (tem = sel; tem != NULL; tem = tem->next) {
-		LIBMTP_track_t *track;
-		RhythmDBEntry *entry;
-		const char *uri;
-		const char *album_name;
-
-		entry = (RhythmDBEntry *)tem->data;
-		uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
-		track = g_hash_table_lookup (priv->entry_map, entry);
-		if (track == NULL) {
-			rb_debug ("Couldn't find track on mtp-device! (%s)", uri);
-			continue;
-		}
-
-		ret = LIBMTP_Delete_Object (priv->device, track->item_id);
-		if (ret != 0) {
-			rb_debug ("Delete track %d failed", track->item_id);
-			report_libmtp_errors (priv->device, TRUE);
-			continue;
-		}
-
-		album_name = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM);
-		if (strcmp (album_name, _("Unknown")) != 0) {
-			remove_track_from_album (RB_MTP_SOURCE (source), album_name, track);
-		}
-
-		g_hash_table_remove (priv->entry_map, entry);
-		rhythmdb_entry_delete (db, entry);
-	}
-	rhythmdb_commit (db);
+	
+	impl_trash_entries (RB_MEDIA_PLAYER_SOURCE (source), sel);
 
 	g_list_free (sel);
-	g_list_free (tem);
 }
 
 static gboolean
@@ -984,51 +959,6 @@ get_db_for_source (RBMtpSource *source)
 
 	return db;
 }
-
-/**
- * Commented out because there is no "Properties" pane for MTP devices
- * yet, so these functions are unused. - Paul.B
- *
-
-static gboolean
-impl_get_sync_auto (RBMtpSource *source)
-{
-	// STUB
-	return FALSE;
-}
-
-static void
-impl_set_sync_auto (RBMtpSource *source, gboolean value)
-{
-	// STUB
-}
-
-static gboolean
-impl_get_sync_music (RBMtpSource *source)
-{
-	// STUB
-	return FALSE;
-}
-
-static void
-impl_set_sync_music (RBMtpSource *source, gboolean value)
-{
-	// STUB
-}
-
-static gboolean
-impl_get_sync_podcasts (RBMtpSource *source)
-{
-	// STUB
-	return FALSE;
-}
-
-static void
-impl_set_sync_podcasts (RBMtpSource *source, gboolean value)
-{
-	// STUB
-}
-*/
 
 static LIBMTP_track_t *
 transfer_track (RBMtpSource *source,
@@ -1218,38 +1148,320 @@ artwork_notify_cb (RhythmDB *db,
 	g_free (image_data);
 }
 
-void
-rb_mtp_source_show_properties (RBMtpSource *source)
+
+
+static GHashTable *
+impl_get_entries	(RBMediaPlayerSource *source)
 {
-	/* FIXME: Copied from the rb-ipod-source.c
-	 * Not converted for MTP yet
+	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
+	GHashTableIter iter;
+	gpointer key, value;
+	
+	g_hash_table_iter_init (&iter, priv->entry_map);
+	while (g_hash_table_iter_next (&iter, &key, &value)) {
+		if (rhythmdb_entry_get_pointer (key, RHYTHMDB_PROP_TYPE) != RHYTHMDB_ENTRY_TYPE_SONG)
+			g_hash_table_insert (result, key, key);
+	}
+	
+	return result;
+}
+
+static GHashTable *
+impl_get_podcasts	(RBMediaPlayerSource *source)
+{
+	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
+	GHashTableIter iter;
+	gpointer key, value;
+	
+	g_hash_table_iter_init (&iter, priv->entry_map);
+	while (g_hash_table_iter_next (&iter, &key, &value)) {
+		if (rhythmdb_entry_get_pointer (key, RHYTHMDB_PROP_TYPE) == RHYTHMDB_ENTRY_TYPE_PODCAST_POST)
+			g_hash_table_insert (result, key, key);
+	}
+	
+	return result;
+}
+
+static guint64
+impl_get_capacity	(RBMediaPlayerSource *source)
+{
+	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	guint64 capacity = 0;
+	int ret;
+	LIBMTP_devicestorage_t *storage;
+	
+	ret = LIBMTP_Get_Storage (priv->device, LIBMTP_STORAGE_SORTBY_NOTSORTED);
+	if (ret != 0) {
+		report_libmtp_errors (priv->device, TRUE);
+		return 0;
+	}
+	
+	for (storage = priv->device->storage;
+	     storage != NULL;
+	     storage = storage->next)
+	{
+		capacity += storage->MaxCapacity;
+	}
+	
+	return capacity;
+}
+
+static guint64
+impl_get_free_space	(RBMediaPlayerSource *source)
+{
+	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	guint64 free = 0;
+	int ret;
+	LIBMTP_devicestorage_t *storage;
+	
+	ret = LIBMTP_Get_Storage (priv->device, LIBMTP_STORAGE_SORTBY_NOTSORTED);
+	if (ret != 0) {
+		report_libmtp_errors (priv->device, TRUE);
+		return 0;
+	}
+	
+	for (storage = priv->device->storage;
+	     storage != NULL;
+	     storage = storage->next)
+	{
+		free += storage->FreeSpaceInBytes;
+	}
+	
+	return free;
+}
+
+static void
+impl_add_entries	(RBMediaPlayerSource *source, GList *entries)
+{
+	rb_source_paste ((RBSource *)source, entries);
+}
+
+static void
+impl_trash_entry	(RBMediaPlayerSource *source, RhythmDBEntry *entry)
+{
+	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	LIBMTP_track_t *track;
+	const char *uri;
+	const char *album_name;
+	
+	RhythmDB *db = get_db_for_source (RB_MTP_SOURCE (source));
+	
+	uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
+	track = g_hash_table_lookup (priv->entry_map, entry);
+	if (track == NULL) {
+		rb_debug ("Couldn't find track on mtp-device! (%s)", uri);
+		return;
+	}
+	
+	if (LIBMTP_Delete_Object (priv->device, track->item_id) != 0) {
+		rb_debug ("Delete track %d failed", track->item_id);
+		report_libmtp_errors (priv->device, TRUE);
+		return;
+	}
+
+	album_name = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM);
+	if (strcmp (album_name, _("Unknown")) != 0) {
+		remove_track_from_album (RB_MTP_SOURCE (source), album_name, track);
+	}
+	g_hash_table_remove (priv->entry_map, entry);
+	rhythmdb_entry_delete (db, entry);
+	
+	rhythmdb_commit (db);
+}
+
+static void
+impl_trash_entries	(RBMediaPlayerSource *source, GList *entries)
+{
+	GList *iter;
+	
+	for (iter = entries; iter != NULL; iter = iter->next) {
+		impl_trash_entry (source, (RhythmDBEntry *)iter->data);
+	}
+}
+
+static gchar *
+impl_get_serial		(RBMediaPlayerSource *source)
+{
+	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	
+	return LIBMTP_Get_Serialnumber(priv->device);
+}
+
+static gchar *
+impl_get_name		(RBMediaPlayerSource *source)
+{
+	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
+	gchar *name = NULL;
+	
+	name = LIBMTP_Get_Friendlyname (priv->device);
+	/* ignore some particular broken device names */
+	if (name == NULL || strcmp (name, "?????") == 0) {
+		g_free (name);
+		name = LIBMTP_Get_Modelname (priv->device);
+	}
+	if (name == NULL) {
+		name = g_strdup (_("Digital Audio Player"));
+	}
+	
+	return name;
+}
+
+static void
+rb_mtp_info_response_cb (GtkDialog *dialog,
+ 			 int response_id,
+ 			 RBMtpSource *source)
+{
+	if (response_id == GTK_RESPONSE_CLOSE) {
+ 		
+		gtk_widget_destroy (GTK_WIDGET (dialog));
+	}
+}
+
+static void
+rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
+			     gpointer         user_data)
+{
+	rb_media_player_prefs_set_boolean (RB_MEDIA_PLAYER_PREFS (user_data),
+				   	   SYNC_AUTO,
+				   	   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
+}
+
+typedef struct {
+	RBMediaPlayerPrefs *prefs;
+	GtkTreeStore *tree_store;
+	GtkTreeView  *tree_view;
+	GtkProgressBar *preview_bar;
+	RBMediaPlayerSource *source;
+} RBMtpSyncEntriesChangedData;
+
+static void
+update_sync_preview_bar (RBMtpSyncEntriesChangedData *data) {
+	char *text;
+	char *used;
+	char *capacity;
+	
+	rb_media_player_prefs_update_sync (data->prefs);
+	
+	used = g_format_size_for_display (rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED));
+	capacity = g_format_size_for_display (impl_get_capacity(data->source));
+	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (data->preview_bar), 
+				       (double)(rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED))/(double)impl_get_capacity (data->source));
+	/* Translators: this is used to display the amount of storage space which will be
+	 * used and the total storage space on an device after it is synced.
 	 */
-	/*
+	text = g_strdup_printf (_("%s of %s"), used, capacity);
+	gtk_progress_bar_set_text (GTK_PROGRESS_BAR (data->preview_bar), text);
+	g_free (text);
+	g_free (capacity);
+	g_free (used);
+}
+
+static void
+set_treeview_children (RBMtpSyncEntriesChangedData *data,
+		       GtkTreeIter *parent,
+		       guint list,
+		       gboolean value)
+{
+	GtkTreeIter iter;
+//	GtkCellRendererToggle *toggle;
+	gchar *name;
+	gboolean valid;
+	
+	valid = gtk_tree_model_iter_children (GTK_TREE_MODEL (data->tree_store), &iter, parent);
+		
+	while (valid) {
+		gtk_tree_model_get (GTK_TREE_MODEL (data->tree_store), &iter,
+				    1, &name,
+				    -1);
+		gtk_tree_store_set (data->tree_store, &iter,
+				    0, rb_media_player_prefs_get_entry (data->prefs, list, name) && value,
+				    2, value,
+				    -1);
+		
+		g_free (name);
+		valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (data->tree_store), &iter);
+	}
+}
+
+static void
+rb_mtp_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
+				gchar	      *path,
+				RBMtpSyncEntriesChangedData *data)
+{
+	// FIXME: path may not be correct
+	GtkTreeIter   iter;
+	
+	if ( gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, path) == TRUE )
+	{
+		gchar *name;
+		gboolean value;
+		
+		gtk_tree_model_get(GTK_TREE_MODEL (data->tree_store), &iter, 1, &name, -1);
+		value = !gtk_cell_renderer_toggle_get_active (cell_renderer);
+		
+		gtk_tree_store_set (data->tree_store,
+				    &iter,
+				    0, value,
+				    -1 );
+		
+		if (g_strcmp0 (name, "Music Playlists") == 0) {
+			rb_media_player_prefs_set_boolean (data->prefs,		// RBMediaPlayerPrefs *
+						   SYNC_MUSIC,		// int
+						   value);		// gboolean
+			// Enable/Disable the children of this node.
+			set_treeview_children (data, &iter, SYNC_PLAYLISTS_LIST, value);
+		} else if (g_strcmp0 (name, "Podcasts") == 0) {
+			rb_media_player_prefs_set_boolean (data->prefs,		// RBMediaPlayerPrefs *
+						   SYNC_PODCASTS,	// int
+						   value);		// gboolean
+			// Enable/Disable the children of this node.
+			set_treeview_children (data, &iter, SYNC_PODCASTS_LIST, value);
+		} else {
+			if (path[0] == '0')
+				rb_media_player_prefs_set_entry (data->prefs,	// RBMediaPlayerPrefs *
+							 SYNC_PLAYLISTS_LIST, //guint
+						 	 name,		// gchar * of the entry changed
+						 	 value);	// gboolean
+			else
+				rb_media_player_prefs_set_entry (data->prefs,	// RBMediaPlayerPrefs *
+							 SYNC_PODCASTS_LIST, //guint
+						 	 name,		// gchar * of the entry changed
+						 	 value);	// gboolean
+		}
+	}
+	
+	update_sync_preview_bar (data);
+}
+
+static void
+impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
+{
 	GtkBuilder *builder;
 	GObject *dialog;
 	GObject *label;
 	char *text;
-	const gchar *mp;
 	char *used;
 	char *capacity;
 	char *builder_file;
  	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
-	Itdb_Device *dev;
+ 	
 	RBPlugin *plugin;
+	
+	RBShell *shell;
 
-	if (priv->ipod_db == NULL) {
-		rb_debug ("can't show device properties with no device db");
+	if (priv->device == NULL) {
+		rb_debug ("can't show device properties with no device");
 		return;
 	}
 
-	ipod_dev = rb_ipod_db_get_device (priv->ipod_db);
-
 	g_object_get (source, "plugin", &plugin, NULL);
-	builder_file = rb_plugin_find_file (plugin, "ipod-info.ui");
+	builder_file = rb_plugin_find_file (plugin, "mtp-info.ui");
 	g_object_unref (plugin);
 
 	if (builder_file == NULL) {
-		g_warning ("Couldn't find ipod-info.ui");
+		g_warning ("Couldn't find mtp-info.ui");
 		return;
 	}
 
@@ -1257,26 +1469,28 @@ rb_mtp_source_show_properties (RBMtpSource *source)
 	g_free (builder_file);
 
  	if (builder == NULL) {
- 		rb_debug ("Couldn't load ipod-info.ui");
+ 		rb_debug ("Couldn't load mtp-info.ui");
  		return;
  	}
 	
- 	dialog = gtk_builder_get_object (builder, "ipod-information");
+ 	dialog = gtk_builder_get_object (builder, "mtp-information");
  	g_signal_connect_object (dialog,
  				 "response",
- 				 G_CALLBACK (rb_ipod_info_response_cb),
+ 				 G_CALLBACK (rb_mtp_info_response_cb),
  				 source, 0);
  
  	label = gtk_builder_get_object (builder, "label-number-track-number");
- 	text = g_strdup_printf ("%u", g_list_length (rb_ipod_db_get_tracks(priv->ipod_db) ));
+ 	text = g_strdup_printf ("%u", g_hash_table_size (priv->entry_map));
  	gtk_label_set_text (GTK_LABEL (label), text);
  	g_free (text);
  
- 	label = gtk_builder_get_object (builder, "entry-ipod-name");
- 	gtk_entry_set_text (GTK_ENTRY (label), rb_ipod_db_get_ipod_name (priv->ipod_db));
+ 	label = gtk_builder_get_object (builder, "entry-mtp-name");
+ 	gtk_entry_set_text (GTK_ENTRY (label), impl_get_name (source));
  	g_signal_connect (label, "focus-out-event",
- 			  (GCallback)ipod_name_changed_cb, source);
+ 			  (GCallback)rb_mtp_source_name_changed_cb, source);
  
+	/* FIXME: Not working yet
+	 *
  	label = gtk_builder_get_object (builder, "label-number-playlist-number");
  	text = g_strdup_printf ("%u", g_list_length (rb_ipod_db_get_playlists (priv->ipod_db)));
  	gtk_label_set_text (GTK_LABEL (label), text);
@@ -1285,64 +1499,173 @@ rb_mtp_source_show_properties (RBMtpSource *source)
  	label = gtk_builder_get_object (builder, "label-mount-point-value");
 	mp = rb_ipod_db_get_mount_path (priv->ipod_db);
  	gtk_label_set_text (GTK_LABEL (label), mp);
-
-	label = gtk_builder_get_object (builder, "progressbar-ipod-usage");
-	used = g_format_size_for_display (rb_ipod_helpers_get_capacity (mp) - rb_ipod_helpers_get_free_space (mp));
-	capacity = g_format_size_for_display (rb_ipod_helpers_get_capacity(mp));
+ 	*/
+ 	
+	label = gtk_builder_get_object (builder, "progressbar-mtp-usage");
+	used = g_format_size_for_display (impl_get_capacity (source) - impl_get_free_space (source));
+	capacity = g_format_size_for_display (impl_get_capacity(source));
 	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (label), 
-				       (double)(rb_ipod_helpers_get_capacity (mp) - rb_ipod_helpers_get_free_space (mp))/(double)rb_ipod_helpers_get_capacity (mp));
-	*//* Translators: this is used to display the amount of storage space
-	 * used and the total storage space on an iPod.
-	 *//*
+				       (double)(impl_get_capacity (source) - impl_get_free_space (source))/(double)impl_get_capacity (source));
+	/* Translators: this is used to display the amount of storage space
+	 * used and the total storage space on an device.
+	 */
 	text = g_strdup_printf (_("%s of %s"), used, capacity);
 	gtk_progress_bar_set_text (GTK_PROGRESS_BAR (label), text);
 	g_free (text);
 	g_free (capacity);
 	g_free (used);
 	
-	*//* Not done with this, just a placeholder for now. -Paul B. *//*
-	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-auto");
-	// Needs to be on if rb_ipod_helpers_get_autosync
+	label = gtk_builder_get_object (builder, "checkbutton-mtp-sync-auto");
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
-				      impl_get_sync_auto (source));
+				      rb_media_player_prefs_get_boolean (prefs, SYNC_AUTO));
  	g_signal_connect (label, "toggled",
- 			  (GCallback)rb_ipod_sync_auto_changed_cb, source);
+ 			  (GCallback)rb_mtp_sync_auto_changed_cb, prefs);
 	
-	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-music");
-	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
-				      impl_get_sync_music (source));
- 	g_signal_connect (label, "toggled",
- 			  (GCallback)rb_ipod_sync_music_changed_cb, source);
+	// Set tree models for each treeview
+	// tree_store columns are: Active, Name, Activatable
+	GtkTreeStore *tree_store = gtk_tree_store_new (3, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
+	GtkTreeIter  tree_iter;
+	GtkTreeIter  parent_iter;
+	GList * list_iter;
+	GtkTreeViewColumn *col;
+	GtkCellRenderer *renderer;
+	gchar *name;
+	RhythmDB *library_db;
 	
-	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-podcasts");
-	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
-				      impl_get_sync_podcasts (source));
- 	g_signal_connect (label, "toggled",
- 			  (GCallback)rb_ipod_sync_podcasts_changed_cb, source);
+	RBMtpSyncEntriesChangedData *entries_changed_data = g_new0 (RBMtpSyncEntriesChangedData, 1);
+	entries_changed_data->prefs = prefs;
+	entries_changed_data->tree_store = tree_store;
+	label = gtk_builder_get_object (builder, "progressbar-mtp-sync-preview");
+	entries_changed_data->preview_bar = GTK_PROGRESS_BAR (label);
+	label = gtk_builder_get_object (builder, "treeview-mtp-sync");
+	entries_changed_data->tree_view = GTK_TREE_VIEW (label);
+	entries_changed_data->source = source;
+		
+	g_object_get (RB_SOURCE (source), "shell", &shell, NULL);
+	g_object_get (shell, "db", &library_db, NULL);
+	
+	// Set up the treestore
+	
+	// Append the Music Library Parent
+	gtk_tree_store_append (tree_store,
+			       &parent_iter,
+			       NULL);
+	gtk_tree_store_set (tree_store, &parent_iter,
+			    0, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC),
+			    1, "Music Playlists",
+			    2, TRUE,
+			    -1);
+	
+	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
+	while (list_iter) {
+		gtk_tree_store_append (tree_store, &tree_iter, &parent_iter);
+		// set playlists data here
+		g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
+		
+		// set this row's data
+		gtk_tree_store_set (tree_store, &tree_iter,
+				    0, rb_media_player_prefs_get_entry (prefs, SYNC_PLAYLISTS_LIST, name)
+				    	&& rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC),
+				    1, name,
+				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC),
+				    -1);
+                
+		list_iter = list_iter->next;
+	}
+	
+	// Append the Podcasts Parent
+	gtk_tree_store_append (tree_store,
+			       &parent_iter,
+			       NULL);
+	gtk_tree_store_set (tree_store, &parent_iter,
+			    0, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS),
+			    1, "Podcasts",
+			    2, TRUE,
+			    -1);
+	
+	GtkTreeModel *query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(library_db));
+	rhythmdb_do_full_query (library_db, RHYTHMDB_QUERY_RESULTS (query_model),
+				RHYTHMDB_QUERY_PROP_EQUALS,
+				RHYTHMDB_PROP_TYPE, RHYTHMDB_ENTRY_TYPE_PODCAST_FEED,
+				RHYTHMDB_QUERY_END);
+	GtkTreeIter tree_iter2;
+	gboolean valid = gtk_tree_model_get_iter_first (query_model, &tree_iter);
+	while (valid) {
+		RhythmDBEntry *entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), &tree_iter);
+		gtk_tree_store_append (tree_store, &tree_iter2, &parent_iter);
+		
+		// set up this row
+		name = strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE));
+		gtk_tree_store_set (tree_store, &tree_iter2,
+				    0, rb_media_player_prefs_get_entry (prefs, SYNC_PODCASTS_LIST, name)
+				    	&& rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS),
+				    1, name,
+				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS),
+				    -1);
+		g_free (name);
+		
+		valid = gtk_tree_model_iter_next (query_model, &tree_iter);
+	}
+	
+	// Set up the treeview
+	
+	// First column
+	renderer = gtk_cell_renderer_toggle_new();
+	col = gtk_tree_view_column_new_with_attributes (NULL,
+							renderer,
+							"active", 0,
+							"sensitive", 2,
+							"activatable", 2,
+							NULL);
+	g_signal_connect (G_OBJECT(renderer),
+			  "toggled", G_CALLBACK (rb_mtp_sync_entries_changed_cb),
+			  entries_changed_data);
+	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
+	
+	// Second column
+	renderer = gtk_cell_renderer_text_new();
+	col = gtk_tree_view_column_new_with_attributes (NULL,
+							renderer,
+							"text", 1,
+							"sensitive", 2,
+							NULL);
+	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
+	gtk_tree_view_set_model (GTK_TREE_VIEW(label),
+				 GTK_TREE_MODEL(tree_store));
+	gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(label)),
+				    GTK_SELECTION_NONE);
+	
+	g_object_unref (shell);
+	g_object_unref (tree_store);
+	
+	// Set up the Sync Preview Bar
+	update_sync_preview_bar (entries_changed_data);
 
+	/* FIXME: Not working, yet.
 	label = gtk_builder_get_object (builder, "label-device-node-value");
 	text = rb_ipod_helpers_get_device (RB_SOURCE(source));
 	gtk_label_set_text (GTK_LABEL (label), text);
 	g_free (text);
+	*/
+ 	label = gtk_builder_get_object (builder, "label-mtp-model-value");
+ 	gtk_label_set_text (GTK_LABEL (label), LIBMTP_Get_Modelname (priv->device));
 
- 	label = gtk_builder_get_object (builder, "label-ipod-model-value");
- 	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "ModelNumStr"));
-
+	/* FIXME: Not working yet.
  	label = gtk_builder_get_object (builder, "label-database-version-value");
 	text = g_strdup_printf ("%u", rb_ipod_db_get_database_version (priv->ipod_db));
  	gtk_label_set_text (GTK_LABEL (label), text);
 	g_free (text);
-
+	*/
+	
  	label = gtk_builder_get_object (builder, "label-serial-number-value");
-	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "pszSerialNumber"));
+	gtk_label_set_text (GTK_LABEL (label), impl_get_serial (source));
 
  	label = gtk_builder_get_object (builder, "label-firmware-version-value");
-	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "VisibleBuildID"));
+	gtk_label_set_text (GTK_LABEL (label), LIBMTP_Get_Deviceversion (priv->device));
 
  	gtk_widget_show (GTK_WIDGET (dialog));
 
 	g_object_unref (builder);
-	*/
 }
 
 static void

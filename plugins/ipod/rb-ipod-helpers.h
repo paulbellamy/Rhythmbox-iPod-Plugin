@@ -42,9 +42,6 @@ char *rb_ipod_helpers_get_device (RBSource *source);
 gboolean rb_ipod_helpers_is_ipod (GMount *mount);
 char *rb_ipod_helpers_get_serial (GMount *mount);
 gboolean rb_ipod_helpers_needs_init (GMount *mount);
-guint    rb_ipod_helpers_track_hash  (gconstpointer v);
-gboolean rb_ipod_helpers_track_equal (gconstpointer v1,
-				      gconstpointer v2);
 void rb_ipod_helpers_hash_table_insert (gpointer key,
 					gpointer value,
 					gpointer hash_table);
