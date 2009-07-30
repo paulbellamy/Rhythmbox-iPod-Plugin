@@ -1160,7 +1160,11 @@ impl_get_entries	(RBMediaPlayerSource *source)
 	
 	g_hash_table_iter_init (&iter, priv->entry_map);
 	while (g_hash_table_iter_next (&iter, &key, &value)) {
-		if (rhythmdb_entry_get_pointer (key, RHYTHMDB_PROP_TYPE) != RHYTHMDB_ENTRY_TYPE_SONG)
+		/* FIXME: Just checks if the genre is "Podcast".  Sort of hackish,
+		 * But, because MTP players don't have a uniform way of handling
+		 * Podcasts it is the best we can do for now
+		 */
+		if (strcmp (((LIBMTP_track_t *)value)->genre, "Podcast") != 0)
 			g_hash_table_insert (result, key, key);
 	}
 	
@@ -1177,7 +1181,11 @@ impl_get_podcasts	(RBMediaPlayerSource *source)
 	
 	g_hash_table_iter_init (&iter, priv->entry_map);
 	while (g_hash_table_iter_next (&iter, &key, &value)) {
-		if (rhythmdb_entry_get_pointer (key, RHYTHMDB_PROP_TYPE) == RHYTHMDB_ENTRY_TYPE_PODCAST_POST)
+		/* FIXME: Just checks if the genre is "Podcast".  Sort of hackish,
+		 * But, because MTP players don't have a uniform way of handling
+		 * Podcasts it is the best we can do for now
+		 */
+		if (strcmp (((LIBMTP_track_t *)value)->genre, "Podcast") == 0)
 			g_hash_table_insert (result, key, key);
 	}
 	
