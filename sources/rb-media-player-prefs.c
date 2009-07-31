@@ -46,6 +46,9 @@ typedef struct {
 	RhythmDB *db;
 	RBMediaPlayerSource *source;
 	
+	/* lazy-loading style for building sync lists. */
+	gboolean sync_updated;
+	
 	
 	/* loaded/saved to file */
 	gboolean sync_auto;
@@ -514,6 +517,7 @@ void
 rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	
 	GHashTable *itinerary_hash = g_hash_table_new (track_hash_func, track_equal_func);
 	GHashTable *device_hash = g_hash_table_new (track_hash_func, track_equal_func);
 	GList	*to_add = NULL; // Files to go onto the device
@@ -578,6 +582,9 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 	
 	/* Calculate how much space we need */
 	rb_media_player_prefs_calculate_space_needed (prefs);
+	
+	/* mark as updated */
+	priv->sync_updated = TRUE;
 }
 
 gboolean
@@ -696,6 +703,8 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 											   "sync_podcasts_list",
 											   NULL,
 											   NULL) );
+	
+	priv->sync_updated = FALSE;
 
      	return prefs;
 }
@@ -712,6 +721,7 @@ rb_media_player_prefs_get_boolean ( RBMediaPlayerPrefs *prefs,
 		case SYNC_MUSIC_ALL:	return priv->sync_music_all;
 		case SYNC_PODCASTS:	return priv->sync_podcasts;
 		case SYNC_PODCASTS_ALL:	return priv->sync_podcasts_all;
+		case SYNC_UPDATED:	return priv->sync_updated;
 		default:		g_assert_not_reached();
 	}
 }
@@ -755,6 +765,8 @@ rb_media_player_prefs_set_boolean ( RBMediaPlayerPrefs *prefs,
 					break;
 		case SYNC_PODCASTS_ALL:	priv->sync_podcasts_all = value;
 					g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", value);
+					break;
+		case SYNC_UPDATED:	priv->sync_updated = value;
 					break;
 		default:		break;
 	}

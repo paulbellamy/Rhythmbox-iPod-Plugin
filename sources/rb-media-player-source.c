@@ -315,6 +315,9 @@ auto_sync_cb (RhythmDB *db,
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 
+	/* Something changed in the database, sync needs to rebuild update list */
+	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
+	
 	if (rb_media_player_prefs_get_boolean (priv->prefs, SYNC_AUTO))
 		rb_media_player_source_sync (source);
 }
@@ -344,7 +347,9 @@ rb_media_player_source_sync (RBMediaPlayerSource *source)
 		return;
 	}
 	
-	rb_media_player_prefs_update_sync (priv->prefs);
+	/* If lists haven't been built yet, build them. */
+	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED))
+		rb_media_player_prefs_update_sync (priv->prefs);
 	
 	/*
 	// DEBUGGING - Print the lists
@@ -387,6 +392,8 @@ rb_media_player_source_sync (RBMediaPlayerSource *source)
 	// Done with this list, clear it.
 	rb_media_player_prefs_set_list(priv->prefs, SYNC_TO_ADD, NULL);
 	//*/
+	
+	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
 }
 
 guint
