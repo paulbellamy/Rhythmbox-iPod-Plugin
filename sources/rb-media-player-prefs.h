@@ -52,7 +52,7 @@ enum {
 	SYNC_TO_ADD,
 	SYNC_TO_REMOVE,
 	SYNC_SPACE_NEEDED,
-	SYNC_NEEDS_UPDATE
+	SYNC_UPDATED
 };
 
 typedef struct 
