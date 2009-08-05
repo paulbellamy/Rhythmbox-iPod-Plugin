@@ -31,6 +31,7 @@ INCLUDES = 						\
 	-DG_LOG_DOMAIN=\"Rhythmbox\"		 	\
 	-I$(top_srcdir) 				\
 	-I$(top_srcdir)/lib                        	\
+	-I$(top_srcdir)/lib/libmediaplayerid		\
 	-I$(top_srcdir)/metadata                       	\
 	-I$(top_srcdir)/rhythmdb                       	\
 	-I$(top_srcdir)/widgets                    	\
@@ -46,6 +47,7 @@ INCLUDES = 						\
 	$(RHYTHMBOX_CFLAGS)				\
 	$(TOTEM_PLPARSER_CFLAGS)			\
 	$(DBUS_CFLAGS)					\
+	$(GUDEV_CFLAGS)					\
 	-D_XOPEN_SOURCE -D__EXTENSIONS__ -D_BSD_SOURCE
 
 librhythmbox_core_la_SOURCES =				\
@@ -108,8 +110,10 @@ librhythmbox_core_la_LIBADD =				\
 	$(top_builddir)/rhythmdb/librhythmdb.la		\
 	$(top_builddir)/backends/librbbackends.la	\
 	$(top_builddir)/lib/librb.la			\
+	$(top_builddir)/lib/libmediaplayerid/libmediaplayerid.la		\
 	$(DBUS_LIBS)					\
 	$(TOTEM_PLPARSER_LIBS)				\
+	$(GUDEV_LIBS)					\
 	$(RHYTHMBOX_LIBS)				\
 	-lgstpbutils-0.10				\
 	-lgstcontroller-0.10
@@ -146,6 +150,7 @@ EXTRA_DIST += rb-shell.xml rb-shell-player.xml rb-playlist-manager.xml
 
 rhythmbox_LDADD = 					\
 	librhythmbox-core.la				\
+	$(TOTEM_PLPARSER_LIBS)				\
 	$(RHYTHMBOX_LIBS)				\
 	$(DBUS_LIBS)
 

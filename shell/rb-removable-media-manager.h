@@ -36,6 +36,8 @@
 #include "rhythmdb.h"
 #include "rb-shell.h"
 
+#include "mediaplayerid.h"
+
 G_BEGIN_DECLS
 
 #define RB_TYPE_REMOVABLE_MEDIA_MANAGER         (rb_removable_media_manager_get_type ())
@@ -69,8 +71,12 @@ struct _RBRemovableMediaManagerClass
 					 gint done,
 					 gint total,
 					 double fraction);
+
+	RBSource * (*create_source_device) (RBRemovableMediaManager *mgr,
+					 GObject *device);		/* actually a GUdevDevice */
 	RBSource * (*create_source_mount) (RBRemovableMediaManager *mgr,
-					 GMount *mount);
+					 GMount *mount,
+					 MPIDDevice *device_info);
 	RBSource * (*create_source_volume) (RBRemovableMediaManager *mgr,
 					 GVolume *volume);
 };

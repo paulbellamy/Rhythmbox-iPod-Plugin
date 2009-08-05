@@ -338,7 +338,7 @@ rb_ipod_helpers_get_itunesdb_path (GMount *mount)
         return result;
 }
 
-guint64 get_fs_property (const char *mountpoint, const char *attr)
+static guint64 get_fs_property (const char *mountpoint, const char *attr)
 {
         GFile *root;
         GFileInfo *info;
@@ -487,58 +487,51 @@ end:
 }
 
 gboolean
-rb_ipod_helpers_is_ipod (GMount *mount)
-{
-	gboolean result;
-	GVolume *volume;
-	GFile *root;
-
-	root = g_mount_get_root (mount);
-	if (root != NULL) {
-		if (g_file_has_uri_scheme (root, "afc") != FALSE) {
-			g_object_unref (root);
-			return TRUE;
-		}
-		g_object_unref (root);
-	}
-
-	volume = g_mount_get_volume (mount);
-	if (volume == NULL)
-		return FALSE;
-
-	result = volume_is_ipod (volume);
-	g_object_unref (volume);
-
-	return result;
-}
-
-#else
-
-gboolean
-rb_ipod_helpers_is_ipod (GMount *mount)
+rb_ipod_helpers_is_ipod (GMount *mount, MPIDDevice *device_info)
 {
 	GFile *root;
-	gchar *mount_point;
 	gboolean result = FALSE;
+	char **protocols;
 
-	root = g_mount_get_root (mount);
-	if (root != NULL) {
-		gchar *device_dir;
+	/* if we have specific information about the device, use it.
+	 * otherwise, check if the device has an ipod device directory on it.
+	 */
+	g_object_get (device_info, "access-protocols", &protocols, NULL);
+	if (protocols != NULL && g_strv_length (protocols) > 0) {
+		int i;
 
-		mount_point = g_file_get_path (root);
-		if (mount_point != NULL) {
-			device_dir = itdb_get_device_dir (mount_point);
-			if (device_dir != NULL)  {
-				result = g_file_test (device_dir,
-						      G_FILE_TEST_IS_DIR);
-				g_free (device_dir);
+		for (i = 0; protocols[i] != NULL; i++) {
+			if (g_str_equal (protocols[i], "ipod")) {
+				result = TRUE;
+				break;
 			}
 		}
+	} else {
+		root = g_mount_get_root (mount);
+		if (root != NULL) {
+			gchar *device_dir;
 
-		g_free (mount_point);
-		g_object_unref (root);
+			if (g_file_has_uri_scheme (root, "afc") != FALSE) {
+				result = TRUE;
+			} else {
+				gchar *mount_point;
+				mount_point = g_file_get_path (root);
+				if (mount_point != NULL) {
+					device_dir = itdb_get_device_dir (mount_point);
+					if (device_dir != NULL)  {
+						result = g_file_test (device_dir,
+								      G_FILE_TEST_IS_DIR);
+						g_free (device_dir);
+					}
+				}
+
+				g_free (mount_point);
+			}
+			g_object_unref (root);
+		}
 	}
 
+	g_strfreev (protocols);
 	return result;
 }
 #endif

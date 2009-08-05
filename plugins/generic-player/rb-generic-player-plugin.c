@@ -46,13 +46,11 @@
 #include "rb-removable-media-manager.h"
 #include "rb-generic-player-source.h"
 #include "rb-generic-player-playlist-source.h"
-#ifdef HAVE_HAL
-#include "rb-nokia770-source.h"
-#include "rb-psp-source.h"
-#endif
 #include "rb-file-helpers.h"
 #include "rb-stock-icons.h"
 #include "rb-sourcelist.h"
+#include "rb-nokia770-source.h"
+#include "rb-psp-source.h"
 
 
 #define RB_TYPE_GENERIC_PLAYER_PLUGIN		(rb_generic_player_plugin_get_type ())
@@ -116,10 +114,8 @@ rb_generic_player_plugin_class_init (RBGenericPlayerPluginClass *klass)
 
 	RB_PLUGIN_REGISTER_TYPE(rb_generic_player_source);
 	RB_PLUGIN_REGISTER_TYPE(rb_generic_player_playlist_source);
-#ifdef HAVE_HAL
 	RB_PLUGIN_REGISTER_TYPE(rb_psp_source);
 	RB_PLUGIN_REGISTER_TYPE(rb_nokia770_source);
-#endif
 }
 
 static void
@@ -196,18 +192,16 @@ rb_generic_player_plugin_delete_playlist (GtkAction *actino, RBGenericPlayerPlug
 }
 
 static RBSource *
-create_source_cb (RBRemovableMediaManager *rmm, GMount *mount, RBGenericPlayerPlugin *plugin)
+create_source_cb (RBRemovableMediaManager *rmm, GMount *mount, MPIDDevice *device_info, RBGenericPlayerPlugin *plugin)
 {
 	RBSource *source = NULL;
 
-#ifdef HAVE_HAL
-	if (rb_psp_is_mount_player (mount))
-		source = RB_SOURCE (rb_psp_source_new (plugin->shell, mount));
-	if (source == NULL && rb_nokia770_is_mount_player (mount))
-		source = RB_SOURCE (rb_nokia770_source_new (plugin->shell, mount));
-#endif
-	if (source == NULL && rb_generic_player_is_mount_player (mount))
-		source = RB_SOURCE (rb_generic_player_source_new (plugin->shell, mount));
+	if (rb_psp_is_mount_player (mount, device_info))
+		source = RB_SOURCE (rb_psp_source_new (plugin->shell, mount, device_info));
+	if (source == NULL && rb_nokia770_is_mount_player (mount, device_info))
+		source = RB_SOURCE (rb_nokia770_source_new (plugin->shell, mount, device_info));
+	if (source == NULL && rb_generic_player_is_mount_player (mount, device_info))
+		source = RB_SOURCE (rb_generic_player_source_new (plugin->shell, mount, device_info));
 
 	if (plugin->actions == NULL) {
 		plugin->actions = gtk_action_group_new ("GenericPlayerActions");

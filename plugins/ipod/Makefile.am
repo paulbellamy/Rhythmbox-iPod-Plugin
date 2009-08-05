@@ -16,14 +16,14 @@ libipod_la_LDFLAGS = $(PLUGIN_LIBTOOL_FLAGS)
 libipod_la_LIBTOOLFLAGS = --tag=disable-static
 libipod_la_LIBADD = 					\
 	$(top_builddir)/shell/librhythmbox-core.la	\
-	$(HAL_LIBS)					\
 	$(IPOD_LIBS)
 
 INCLUDES = 						\
         -DGNOMELOCALEDIR=\""$(datadir)/locale"\"        \
 	-DG_LOG_DOMAIN=\"Rhythmbox\"		 	\
 	-I$(top_srcdir) 				\
-	-I$(top_srcdir)/lib                        	\
+	-I$(top_srcdir)/lib                             \
+	-I$(top_srcdir)/lib/libmediaplayerid            \
 	-I$(top_srcdir)/metadata                       	\
 	-I$(top_srcdir)/player                       	\
 	-I$(top_srcdir)/rhythmdb                       	\
@@ -36,7 +36,6 @@ INCLUDES = 						\
 	-DSHARE_DIR=\"$(pkgdatadir)\"                   \
 	-DDATADIR=\""$(datadir)"\"			\
 	$(RHYTHMBOX_CFLAGS)				\
-	$(HAL_CFLAGS)					\
 	$(IPOD_CFLAGS)					\
 	-D_XOPEN_SOURCE -D_BSD_SOURCE
 

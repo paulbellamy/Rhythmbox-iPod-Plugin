@@ -30,6 +30,8 @@
 #ifndef __RB_PSP_SOURCE_H
 #define __RB_PSP_SOURCE_H
 
+#include "mediaplayerid.h"
+
 #include "rb-shell.h"
 #include "rb-generic-player-source.h"
 #include "rhythmdb.h"
@@ -53,11 +55,11 @@ typedef struct
 	RBGenericPlayerSourceClass parent;
 } RBPspSourceClass;
 
-RBRemovableMediaSource *	rb_psp_source_new		(RBShell *shell, GMount *mount);
+RBRemovableMediaSource *rb_psp_source_new		(RBShell *shell, GMount *mount, MPIDDevice *device_info);
 GType			rb_psp_source_get_type		(void);
 GType			rb_psp_source_register_type	(GTypeModule *module);
 
-gboolean		rb_psp_is_mount_player		(GMount *mount);
+gboolean		rb_psp_is_mount_player		(GMount *mount, MPIDDevice *device_info);
 
 G_END_DECLS
 

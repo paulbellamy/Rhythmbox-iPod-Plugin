@@ -56,11 +56,12 @@ typedef struct
 	RBMediaPlayerSourceClass parent;
 } RBMtpSourceClass;
 
-RBBrowserSource *	rb_mtp_source_new		(RBPlugin *plugin,
-							 RBShell *shell,
-							 LIBMTP_mtpdevice_t *device,
-							 const char *udi,
-							 GKeyFile **key_file);
+#if defined(HAVE_GUDEV)
+RBSource *		rb_mtp_source_new		(RBShell *shell, LIBMTP_mtpdevice_t *device, GKeyFile **key_file);
+#else
+RBSource *		rb_mtp_source_new		(RBShell *shell, LIBMTP_mtpdevice_t *device, const char *udi, GKeyFile **key_file);
+#endif
+
 GType			rb_mtp_source_get_type		(void);
 GType			rb_mtp_source_register_type	(GTypeModule *module);
 
