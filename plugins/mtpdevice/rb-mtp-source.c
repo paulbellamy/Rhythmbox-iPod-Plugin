@@ -145,9 +145,13 @@ static guint64		impl_get_free_space	(RBMediaPlayerSource *source);
 static void		impl_add_entries	(RBMediaPlayerSource *source, GList *entries);
 static void		impl_trash_entry	(RBMediaPlayerSource *source, RhythmDBEntry *entry);
 static void		impl_trash_entries	(RBMediaPlayerSource *source, GList *entries);
+static void		impl_add_playlist	(RBMediaPlayerSource *source, gchar *name, GList *entries);
+static void		impl_trash_playlist	(RBMediaPlayerSource *source, gchar *name);
 static gchar *		impl_get_serial		(RBMediaPlayerSource *source);
 static gchar *		impl_get_name		(RBMediaPlayerSource *source);
 static void		impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs);
+
+static void add_to_playlist (RBMtpSource *source, RhythmDBEntry *entry, RBSource *playlist);
 
 static void add_track_to_album (RBMtpSource *source, const char *album_name, LIBMTP_track_t *track);
 
@@ -248,6 +252,8 @@ rb_mtp_source_class_init (RBMtpSourceClass *klass)
 	mps_class->impl_get_free_space = impl_get_free_space;
 	mps_class->impl_add_entries = impl_add_entries;
 	mps_class->impl_trash_entries = impl_trash_entries;
+	mps_class->impl_add_playlist = impl_add_playlist;
+	mps_class->impl_trash_playlist = impl_trash_playlist;
 	mps_class->impl_get_serial = impl_get_serial;
 	mps_class->impl_get_name = impl_get_name;
 	mps_class->impl_show_properties = impl_show_properties;
@@ -1287,6 +1293,27 @@ impl_trash_entries	(RBMediaPlayerSource *source, GList *entries)
 	for (iter = entries; iter != NULL; iter = iter->next) {
 		impl_trash_entry (source, (RhythmDBEntry *)iter->data);
 	}
+}
+
+static void
+add_to_playlist (RBMtpSource *source, RhythmDBEntry *entry, RBSource *playlist)
+{
+	/* FIXME: Stub */
+}
+
+static void
+impl_add_playlist	(RBMediaPlayerSource *source,
+			 gchar *name,
+			 GList *entries)
+{
+	/* FIXME: Stub */
+}
+
+static void
+impl_trash_playlist	(RBMediaPlayerSource *source,
+			 gchar *name)
+{
+	/* FIXME: Stub */
 }
 
 static gchar *
