@@ -102,9 +102,13 @@ static GHashTable * impl_get_entries (RBMediaPlayerSource *source);
 static GHashTable * impl_get_podcasts (RBMediaPlayerSource *source);
 static void impl_add_entries (RBMediaPlayerSource *source, GList *entries);
 static void impl_trash_entries (RBMediaPlayerSource *source, GList *entries);
+static void impl_add_playlist (RBMediaPlayerSource *source, gchar *name, GList *entries);
+static void impl_trash_playlist (RBMediaPlayerSource *source, gchar *name);
 static gchar * impl_get_serial (RBMediaPlayerSource *source);
 static gchar * impl_get_name (RBMediaPlayerSource *source);
 static void impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs);
+
+static void add_to_playlist (RBiPodSource *source, Itdb_Track *song, Itdb_Playlist *playlist);
 
 static void connect_signal_handlers (RBiPodSource *source);
 static void disconnect_signal_handlers (RBiPodSource *source);
@@ -174,6 +178,8 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	mps_class->impl_get_free_space = impl_get_free_space;
 	mps_class->impl_add_entries = impl_add_entries;
 	mps_class->impl_trash_entries = impl_trash_entries;
+	mps_class->impl_add_playlist = impl_add_playlist;
+	mps_class->impl_trash_playlist = impl_trash_playlist;
 	mps_class->impl_get_serial = impl_get_serial;
 	mps_class->impl_get_name = impl_get_name;
 	mps_class->impl_show_properties = impl_show_properties;
@@ -1082,6 +1088,53 @@ impl_move_to_trash (RBSource *source)
 	g_list_free (sel);
 }
 
+static void
+impl_add_playlist (RBMediaPlayerSource *source,
+		   gchar *name,
+		   GList *entries)	// GList of RhythmDBEntry * on the device to go into the playlist
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	Itdb_Playlist *ipod_playlist;
+	GList *iter;
+	
+	ipod_playlist = itdb_playlist_new (_(name), FALSE);
+	rb_ipod_db_add_playlist (priv->ipod_db, ipod_playlist);
+	add_rb_playlist (RB_IPOD_SOURCE (source), ipod_playlist);
+	
+	for (iter = entries;
+	     iter != NULL;
+	     iter = iter->next)
+	{
+		add_to_playlist (RB_IPOD_SOURCE (source), iter->data, ipod_playlist);
+	}
+}
+
+static void
+impl_trash_playlist (RBMediaPlayerSource *source,
+		     gchar *name)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	GList *p;
+	const gchar *name_iter;
+	
+	for (p = rb_ipod_db_get_playlists (priv->ipod_db);
+	     p != NULL;
+	     p = p->next) {
+		Itdb_Playlist *playlist = (Itdb_Playlist *)p->data;
+		if (!itdb_playlist_is_mpl (playlist) && !playlist->is_spl) {
+			RBSource *rb_playlist = RB_SOURCE (playlist->userdata);
+			
+			// This gripes about something being uninstantiable
+			g_object_get (G_OBJECT (rb_playlist), "name", &name_iter, NULL);
+			
+			if ( g_strcmp0 ( name, name_iter  ) == 0 ) {
+				rb_source_delete_thyself (rb_playlist);
+				return;
+			}
+		}
+	}
+}
+
 static char *
 impl_build_dest_uri (RBRemovableMediaSource *source,
 		     RhythmDBEntry *entry,
@@ -1264,7 +1317,7 @@ rb_ipod_source_get_playlist (RBiPodSource *source,
 	
 	return ipod_playlist;
 }
-/*
+
 static void
 add_to_playlist (RBiPodSource *source,
 		 Itdb_Track *song,
@@ -1279,7 +1332,7 @@ add_to_playlist (RBiPodSource *source,
  	rb_static_playlist_source_add_location (RB_STATIC_PLAYLIST_SOURCE (playlist), filename, -1);
 	g_free (filename);
 }
-*/
+
 static void
 add_to_podcasts (RBiPodSource *source, Itdb_Track *song)
 {
