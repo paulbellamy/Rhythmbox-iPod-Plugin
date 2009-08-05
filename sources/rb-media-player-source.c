@@ -335,9 +335,6 @@ rb_media_player_source_show_properties (RBMediaPlayerSource *source)
 void
 rb_media_player_source_sync (RBMediaPlayerSource *source)
 {
-	/* FIXME: this is a pretty ugly skeleton function.
-	 * 
-	 */
 	 RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
 	// Check we have enough space, on the iPod.
@@ -347,39 +344,9 @@ rb_media_player_source_sync (RBMediaPlayerSource *source)
 		return;
 	}
 	
-	/* If lists haven't been built yet, build them. */
 	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED))
 		rb_media_player_prefs_update_sync (priv->prefs);
 	
-	/*
-	// DEBUGGING - Print the lists
-	GList *iter;
-	g_print("To Add:\n");
-	for (iter = rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_ADD);
-	     iter;
-	     iter = iter->next)
-	{
-		g_print("%15s - %15s - %15s\n",
-			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_TITLE),
-			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ARTIST),
-			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ALBUM));
-	}
-	
-	g_print("To Remove:\n");
-	for (iter = rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_REMOVE);
-	     iter;
-	     iter = iter->next)
-	{
-		g_print("%15s - %15s - %15s\n",if (priv->prefs) {
-		g_object_unref (G_OBJECT (priv->prefs));
-		priv->prefs = NULL;
-	}
-			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_TITLE),
-			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ARTIST),
-			rhythmdb_entry_get_string (iter->data, RHYTHMDB_PROP_ALBUM));
-	}
-	//*/
-	//*
 	// Remove tracks and podcasts on device, but not in itinerary
 	rb_media_player_source_trash_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
 	
@@ -391,8 +358,8 @@ rb_media_player_source_sync (RBMediaPlayerSource *source)
 	
 	// Done with this list, clear it.
 	rb_media_player_prefs_set_list(priv->prefs, SYNC_TO_ADD, NULL);
-	//*/
 	
+	// Set needs Update
 	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
 }
 
