@@ -97,10 +97,7 @@ void	rb_media_player_source_show_properties (RBMediaPlayerSource *source);
 
 void	rb_media_player_source_sync (RBMediaPlayerSource *source);
 
-guint	rb_media_player_source_track_hash (gconstpointer v);
-
-gboolean rb_media_player_source_track_equal (gconstpointer v1,
-					     gconstpointer v2);
+gchar *	rb_media_player_source_track_uuid (RhythmDBEntry *entry);
 
 G_END_DECLS
 

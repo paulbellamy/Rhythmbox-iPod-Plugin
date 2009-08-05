@@ -60,6 +60,8 @@ typedef struct {
 	GHashTable * sync_podcasts_list;
 	
 	/* generated on rb_media_player_prefs_sync_update */
+	GHashTable * itinerary_hash;
+	GHashTable * device_hash;
 	GList *  sync_to_add;
 	GList *  sync_to_remove;
 	guint64	 sync_space_needed; // The space used after syncing
@@ -73,10 +75,6 @@ G_DEFINE_TYPE (RBMediaPlayerPrefs, rb_media_player_prefs, G_TYPE_OBJECT)
 static void rb_media_player_prefs_init (RBMediaPlayerPrefs *prefs);
 static void rb_media_player_prefs_dispose (GObject *object);
 static void rb_media_player_prefs_class_init (RBMediaPlayerPrefsClass *klass);
-
-static guint track_hash_func	(gconstpointer v);
-static gboolean track_equal_func	(gconstpointer v1,
-					 gconstpointer v2);
 
 static gchar ** hash_table_to_string_list (GHashTable * hash_table);
 static GHashTable * string_list_to_hash_table (const gchar ** string_list);
@@ -131,6 +129,12 @@ rb_media_player_prefs_dispose (GObject *object)
 	
 	if (priv->sync_to_remove != NULL)
 		g_list_free( priv->sync_to_remove );
+		
+	if (priv->itinerary_hash != NULL)
+		g_hash_table_unref (priv->itinerary_hash);
+		
+	if (priv->device_hash != NULL)	
+		g_hash_table_unref (priv->device_hash);
 	
 	if (priv->shell != NULL)
 		g_object_unref (priv->shell);
@@ -165,81 +169,6 @@ rb_media_player_prefs_class_init (RBMediaPlayerPrefsClass *klass)
 	object_class->dispose = rb_media_player_prefs_dispose;
 
 	g_type_class_add_private (klass, sizeof (RBMediaPlayerPrefsPrivate));
-}
-
-static guint
-track_hash_func  (gconstpointer v)
-{
-	/* This function is for hashing the two databases for syncing. */
-	GString *str = g_string_new ("");
-	RhythmDBEntry *entry = (RhythmDBEntry *)v;
-
-	g_string_printf (str, "%s%s%s%s%"G_GUINT64_FORMAT,
-			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
-			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
-			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_GENRE),
-			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM),
-			 rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE));
-	
-	//g_print("hash_string: %s\n", str->str);
-	
-	/* FIXME: The below might be needed for hashing podcasts properly,
-	 * but it gives "dereferencing to incomplete type"
-	 *
-	// If it is a podcast
-	if (((RhythmDBEntry *)v)->type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST)
-		g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_POST_TIME));
-	*/
-	
-	guint result = g_string_hash ( str );
-	
-	g_string_free ( str, TRUE );
-	
-	return result;
-}
-
-static gboolean
-track_equal_func (gconstpointer v1,
-		  gconstpointer v2)
-{
-	/* This function is for telling if two tracks are identical.
-	 * It ignores URI and file_name because that will be different on the device and the Library.
-	 */
-	if (g_strcmp0(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE)) != 0)
-		return FALSE;
-	
-	if (g_strcmp0(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ARTIST), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ARTIST)) != 0)
-		return FALSE;
-	
-	if (g_strcmp0(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_GENRE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_GENRE)) != 0)
-		return FALSE;
-	
-	if (g_strcmp0(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ALBUM), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ALBUM)) != 0)
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v1, RHYTHMDB_PROP_FILE_SIZE) != rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v2, RHYTHMDB_PROP_FILE_SIZE) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DURATION) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DURATION) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TRACK_NUMBER) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TRACK_NUMBER) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DISC_NUMBER) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DISC_NUMBER) )
-		return FALSE;
-	/*	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DATE) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DATE) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_YEAR) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_YEAR) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_POST_TIME) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_POST_TIME) )
-		return FALSE;
-	*/
-	
-	return TRUE;
 }
 
 static gchar **
@@ -317,26 +246,20 @@ typedef struct {
 } HashTableInsertionData;
 
 static void
-rb_media_player_prefs_hash_table_insert ( gpointer key,		// RhythmDBEntry *
-				  gpointer value,	// Whatever
-				  gpointer user_data )	// HashTableInsertionData *
+rb_media_player_prefs_hash_table_insert ( gpointer key,		// gchar * track_uuid
+					  gpointer value,	// RhythmDBEntry *entry
+					  gpointer user_data )	// HashTableInsertionData *
 {
-	gpointer orig_key;
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (((HashTableInsertionData *)user_data)->prefs);
 	HashTableInsertionData *data = user_data;
 	GHashTable *hash_table = *(data->hash_table);
-	if ( g_hash_table_lookup_extended ( hash_table, key, &orig_key, NULL) ) {
-		rb_debug ("Hash Table Collision between:\n%s - %s - %s, and\n%s - %s - %s",
-			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
-			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
-			  rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ALBUM),
-			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_TITLE),
-			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ARTIST),
-			  rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
+	
+	if ( g_hash_table_lookup ( hash_table, key ) ) {
+		rb_debug ("Hash table Collision: uuid = %s", (char *)key);
 		return;
 	}
 	
-	RhythmDBEntryType entry_type = rhythmdb_entry_get_entry_type(key);
+	RhythmDBEntryType entry_type = rhythmdb_entry_get_entry_type(value);
 	if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG && !priv->sync_music)
 		return;
 	if (entry_type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST
@@ -344,7 +267,7 @@ rb_media_player_prefs_hash_table_insert ( gpointer key,		// RhythmDBEntry *
 	{
 		if (!priv->sync_podcasts)
 			return;
-		if (!rb_podcast_manager_entry_downloaded (key))
+		if (!rb_podcast_manager_entry_downloaded (value))
 			return;
 	}
 		
@@ -352,7 +275,7 @@ rb_media_player_prefs_hash_table_insert ( gpointer key,		// RhythmDBEntry *
 		
 	g_hash_table_insert ( hash_table,
 			      key,
-			      g_strdup ( rhythmdb_entry_get_string (key, RHYTHMDB_PROP_LOCATION) ) );
+			      value );
 }
 
 static gboolean
@@ -518,8 +441,18 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	GHashTable *itinerary_hash = g_hash_table_new (track_hash_func, track_equal_func);
-	GHashTable *device_hash = g_hash_table_new (track_hash_func, track_equal_func);
+	if (priv->itinerary_hash != NULL) {
+		g_hash_table_unref (priv->itinerary_hash);
+		priv->itinerary_hash = NULL;
+	}
+	
+	if (priv->device_hash != NULL) {
+		g_hash_table_unref (priv->device_hash);
+		priv->device_hash = NULL;
+	}
+	
+	priv->itinerary_hash = g_hash_table_new (g_str_hash, g_str_equal);
+	priv->device_hash = g_hash_table_new (g_str_hash, g_str_equal);
 	GList	*to_add = NULL; // Files to go onto the device
 	GList	*to_remove = NULL; // Files to be removed from the device
 	HashTableComparisonData comparison_data;
@@ -529,12 +462,12 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 		if (priv->sync_music_all) {
 			// Syncing all songs
 			hash_table_insert_all (prefs,
-					       itinerary_hash,
+					       priv->itinerary_hash,
 					       RHYTHMDB_ENTRY_TYPE_SONG);
 		} else {
 			// Only syncing some songs
 			hash_table_insert_some_playlists (prefs,
-							  itinerary_hash);
+							  priv->itinerary_hash);
 		}
 	}
 	
@@ -542,43 +475,39 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 		if (priv->sync_podcasts_all) {
 			// Syncing all podcasts
 			hash_table_insert_all (prefs,
-					       itinerary_hash,
+					       priv->itinerary_hash,
 					       RHYTHMDB_ENTRY_TYPE_PODCAST_POST);
 		} else {
 			// Only syncing some podcasts
 			hash_table_insert_some_podcasts (prefs,
-							 itinerary_hash);
+							 priv->itinerary_hash);
 		}
 	}
 	
 	/* Build device_hash */
 	if (priv->sync_music) {
-		hash_table_duplicate (&device_hash, rb_media_player_source_get_entries (priv->source));
+		hash_table_duplicate (&priv->device_hash, rb_media_player_source_get_entries (priv->source));
 	}
 	
 	if (priv->sync_podcasts) {
-		hash_table_duplicate (&device_hash, rb_media_player_source_get_podcasts (priv->source));
+		hash_table_duplicate (&priv->device_hash, rb_media_player_source_get_podcasts (priv->source));
 	}
 	
 	/* Build Addition List */
-	comparison_data.other_hash_table = device_hash;
+	comparison_data.other_hash_table = priv->device_hash;
 	comparison_data.list = &to_add;
-	g_hash_table_foreach (itinerary_hash,
+	g_hash_table_foreach (priv->itinerary_hash,
 			      rb_media_player_prefs_hash_table_compare, // function to add to add list if necessary
 			      &comparison_data );
 	rb_media_player_prefs_set_list(prefs, SYNC_TO_ADD, to_add);
 	
 	/* Build Removal List */
-	comparison_data.other_hash_table = itinerary_hash;
+	comparison_data.other_hash_table = priv->itinerary_hash;
 	comparison_data.list = &to_remove;
-	g_hash_table_foreach (device_hash,
+	g_hash_table_foreach (priv->device_hash,
 			      rb_media_player_prefs_hash_table_compare, // function to add to remove list if necessary
 			      &comparison_data );
 	rb_media_player_prefs_set_list(prefs, SYNC_TO_REMOVE, to_remove);
-	
-	// Empty the hash tables
-	g_hash_table_unref (itinerary_hash);
-	g_hash_table_unref (device_hash);
 	
 	/* Calculate how much space we need */
 	rb_media_player_prefs_calculate_space_needed (prefs);

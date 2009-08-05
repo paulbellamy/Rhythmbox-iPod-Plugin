@@ -387,79 +387,26 @@ rb_media_player_source_sync (RBMediaPlayerSource *source)
 	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
 }
 
-guint
-rb_media_player_source_track_hash  (gconstpointer v)
+gchar *
+rb_media_player_source_track_uuid  (RhythmDBEntry *entry)
 {
 	/* This function is for hashing the two databases for syncing. */
 	GString *str = g_string_new ("");
-	RhythmDBEntry *entry = (RhythmDBEntry *)v;
 
-	g_string_printf (str, "%s%s%s%s%"G_GUINT64_FORMAT,
+	g_string_printf (str, "%s%s%s%s%"G_GUINT64_FORMAT"%lu%lu%lu",
 			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
 			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
 			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_GENRE),
 			 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM),
-			 rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE));
+			 rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE),
+			 rhythmdb_entry_get_ulong  (entry, RHYTHMDB_PROP_DURATION),
+			 rhythmdb_entry_get_ulong  (entry, RHYTHMDB_PROP_TRACK_NUMBER),
+			 rhythmdb_entry_get_ulong  (entry, RHYTHMDB_PROP_DISC_NUMBER));
 	
-	//g_print("hash_string: %s\n", str->str);
-	
-	/* FIXME: The below might be needed for hashing podcasts properly,
-	 * but it gives "dereferencing to incomplete type"
-	 *
-	// If it is a podcast
-	if (((RhythmDBEntry *)v)->type == RHYTHMDB_ENTRY_TYPE_PODCAST_POST)
-		g_string_append (str, rhythmdb_entry_get_string ((RhythmDBEntry *)v, RHYTHMDB_PROP_POST_TIME));
-	*/
-	
-	guint result = g_string_hash ( str );
+	gchar * result = g_compute_checksum_for_string ( G_CHECKSUM_MD5, str->str, str->len );
 	
 	g_string_free ( str, TRUE );
 	
 	return result;
 }
-
-gboolean
-rb_media_player_source_track_equal (gconstpointer v1,
-			     gconstpointer v2)
-{
-	/* This function is for telling if two tracks are identical.
-	 * It ignores URI and file_name because that will be different on the iPod and the Library.
-	 */
-	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TITLE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TITLE)) != 0)
-		return FALSE;
-	
-	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ARTIST), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ARTIST)) != 0)
-		return FALSE;
-	
-	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_GENRE), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_GENRE)) != 0)
-		return FALSE;
-	
-	if (strcmp(rhythmdb_entry_get_string ((RhythmDBEntry *)v1, RHYTHMDB_PROP_ALBUM), rhythmdb_entry_get_string ((RhythmDBEntry *)v2, RHYTHMDB_PROP_ALBUM)) != 0)
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v1, RHYTHMDB_PROP_FILE_SIZE) != rhythmdb_entry_get_uint64 ((RhythmDBEntry *)v2, RHYTHMDB_PROP_FILE_SIZE) )
-		return FALSE;
-
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DURATION) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DURATION) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_TRACK_NUMBER) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_TRACK_NUMBER) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DISC_NUMBER) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DISC_NUMBER) )
-		return FALSE;
-	/*	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_DATE) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_DATE) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_YEAR) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_YEAR) )
-		return FALSE;
-	
-	if ( rhythmdb_entry_get_ulong ((RhythmDBEntry *)v1, RHYTHMDB_PROP_POST_TIME) != rhythmdb_entry_get_ulong ((RhythmDBEntry *)v2, RHYTHMDB_PROP_POST_TIME) )
-		return FALSE;
-	*/
-	
-	return TRUE;
-}
-
 

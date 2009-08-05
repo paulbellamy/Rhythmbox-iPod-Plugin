@@ -1160,7 +1160,7 @@ static GHashTable *
 impl_get_entries	(RBMediaPlayerSource *source)
 {
 	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
-	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
+	GHashTable *result = g_hash_table_new (g_str_hash, g_str_equal);
 	GHashTableIter iter;
 	gpointer key, value;
 	
@@ -1171,7 +1171,7 @@ impl_get_entries	(RBMediaPlayerSource *source)
 		 * Podcasts it is the best we can do for now
 		 */
 		if (strcmp (((LIBMTP_track_t *)value)->genre, "Podcast") != 0)
-			g_hash_table_insert (result, key, key);
+			g_hash_table_insert (result, rb_media_player_source_track_uuid (key), key);
 	}
 	
 	return result;
@@ -1181,7 +1181,7 @@ static GHashTable *
 impl_get_podcasts	(RBMediaPlayerSource *source)
 {
 	RBMtpSourcePrivate *priv = MTP_SOURCE_GET_PRIVATE (source);
-	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
+	GHashTable *result = g_hash_table_new (g_str_hash, g_str_equal);
 	GHashTableIter iter;
 	gpointer key, value;
 	
@@ -1192,7 +1192,7 @@ impl_get_podcasts	(RBMediaPlayerSource *source)
 		 * Podcasts it is the best we can do for now
 		 */
 		if (strcmp (((LIBMTP_track_t *)value)->genre, "Podcast") == 0)
-			g_hash_table_insert (result, key, key);
+			g_hash_table_insert (result, rb_media_player_source_track_uuid (key), key);
 	}
 	
 	return result;
@@ -1307,6 +1307,9 @@ impl_add_playlist	(RBMediaPlayerSource *source,
 			 GList *entries)
 {
 	/* FIXME: Stub */
+	
+	/* FIXME: This keeps it from saying 'add_to_playlist never used' */
+	add_to_playlist (NULL, NULL, NULL);
 }
 
 static void

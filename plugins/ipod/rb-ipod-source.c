@@ -2221,14 +2221,14 @@ static GHashTable *
 impl_get_podcasts	(RBMediaPlayerSource *source)
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
+	GHashTable *result = g_hash_table_new (g_str_hash, g_str_equal);
 	GHashTableIter iter;
 	gpointer key, value;
 	
 	g_hash_table_iter_init (&iter, priv->entry_map);
 	while (g_hash_table_iter_next (&iter, &key, &value)) {
 		if (((Itdb_Track *)value)->mediatype == MEDIATYPE_PODCAST)
-			g_hash_table_insert (result, key, key);
+			g_hash_table_insert (result, rb_media_player_source_track_uuid (key), key);
 	}
 	
 	return result;
@@ -2242,14 +2242,14 @@ static GHashTable *
 impl_get_entries	(RBMediaPlayerSource *source)
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	GHashTable *result = g_hash_table_new (rb_media_player_source_track_hash, rb_media_player_source_track_equal);
+	GHashTable *result = g_hash_table_new (g_str_hash, g_str_equal);
 	GHashTableIter iter;
 	gpointer key, value;
 	
 	g_hash_table_iter_init (&iter, priv->entry_map);
 	while (g_hash_table_iter_next (&iter, &key, &value)) {
 		if (((Itdb_Track *)value)->mediatype == MEDIATYPE_AUDIO)
-			g_hash_table_insert (result, key, key);
+			g_hash_table_insert (result, rb_media_player_source_track_uuid (key), key);
 	}
 	
 	return result;
