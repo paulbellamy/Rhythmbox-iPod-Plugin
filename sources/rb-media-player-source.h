@@ -63,6 +63,8 @@ typedef struct
 	guint64		(*impl_get_free_space)	(RBMediaPlayerSource *source);
 	void		(*impl_add_entries)	(RBMediaPlayerSource *source, GList *entries);
 	void		(*impl_trash_entries)	(RBMediaPlayerSource *source, GList *entries);
+	void		(*impl_add_playlist)	(RBMediaPlayerSource *source, gchar *name, GList *entries);
+	void		(*impl_trash_playlist)	(RBMediaPlayerSource *source, gchar *name);
 	gchar *		(*impl_get_serial)	(RBMediaPlayerSource *source);
 	gchar *		(*impl_get_name)	(RBMediaPlayerSource *source);
 	void		(*impl_show_properties)	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs);
@@ -82,6 +84,11 @@ void	rb_media_player_source_add_entries	(RBMediaPlayerSource *source,
 						 GList *entries);
 void	rb_media_player_source_trash_entries	(RBMediaPlayerSource *source,
 						 GList *entries);
+void	rb_media_player_source_add_playlist	(RBMediaPlayerSource *source,
+						 gchar *name,
+						 GList *entries); // GList of RhythmDBEntry * which are on the device
+void	rb_media_player_source_trash_playlist	(RBMediaPlayerSource *source,
+						 gchar *name);
 
 gchar * rb_media_player_source_get_serial (RBMediaPlayerSource *source);
 gchar * rb_media_player_source_get_name (RBMediaPlayerSource *source);

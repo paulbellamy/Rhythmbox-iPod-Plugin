@@ -98,6 +98,8 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 	klass->impl_get_free_space = NULL;
 	klass->impl_add_entries = NULL;
 	klass->impl_trash_entries = NULL;
+	klass->impl_add_playlist = NULL;
+	klass->impl_trash_playlist = NULL;
 	klass->impl_get_serial = NULL;
 	klass->impl_get_name = NULL;
 	klass->impl_show_properties = NULL;
@@ -237,6 +239,28 @@ rb_media_player_source_trash_entries	(RBMediaPlayerSource *source,
 	RBMediaPlayerSourceClass *klass = RB_MEDIA_PLAYER_SOURCE_GET_CLASS (source);
 
 	return klass->impl_trash_entries (source, entries);
+}
+
+
+void
+rb_media_player_source_add_playlist	(RBMediaPlayerSource *source,
+					 gchar *name,
+					 GList *entries)
+{
+	RBMediaPlayerSourceClass *klass = RB_MEDIA_PLAYER_SOURCE_GET_CLASS (source);
+
+	if (klass->impl_add_playlist != NULL)
+		return klass->impl_add_playlist (source, name, entries);
+}
+
+void
+rb_media_player_source_trash_playlist	(RBMediaPlayerSource *source,
+					 gchar *name)
+{
+	RBMediaPlayerSourceClass *klass = RB_MEDIA_PLAYER_SOURCE_GET_CLASS (source);
+
+	if (klass->impl_trash_playlist != NULL)
+		return klass->impl_trash_playlist (source, name);
 }
 
 gchar *
