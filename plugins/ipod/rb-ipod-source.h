@@ -30,6 +30,8 @@
 #ifndef __RB_IPOD_SOURCE_H
 #define __RB_IPOD_SOURCE_H
 
+#include "mediaplayerid.h"
+
 #include "rb-shell.h"
 #include "rb-media-player-source.h"
 #include "rhythmdb.h"
@@ -58,6 +60,7 @@ typedef struct
 RBMediaPlayerSource	*rb_ipod_source_new		(RBPlugin *plugin,
 							 RBShell *shell,
                                                          GMount *mount,
+                                                         MPIDDevice *device_info,
                                                          GKeyFile **key_file);
 GType			rb_ipod_source_get_type		(void);
 GType                   rb_ipod_source_register_type    (GTypeModule *module);

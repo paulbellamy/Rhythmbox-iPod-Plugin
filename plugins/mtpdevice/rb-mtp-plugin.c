@@ -395,7 +395,7 @@ create_source_cb (RBMtpPlugin *plugin, LIBMTP_mtpdevice_t *device, const char *u
 {
 	RBSource *source;
 
-	source = RB_SOURCE (rb_mtp_source_new (RB_PLUGIN (plugin), plugin->shell, device, udi, &plugin->key_file));
+	source = RB_SOURCE (rb_mtp_source_new (plugin->shell, device, udi, &plugin->key_file));
 
 	rb_shell_append_source (plugin->shell, source, NULL);
 	plugin->mtp_sources = g_list_prepend (plugin->mtp_sources, source);

@@ -37,10 +37,6 @@
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
 #include <gpod/itdb.h>
-#ifdef HAVE_HAL
-#include <libhal.h>
-#include <dbus/dbus.h>
-#endif
 
 #include "rb-ipod-helpers.h"
 #include "rb-util.h"
@@ -338,7 +334,7 @@ rb_ipod_helpers_get_itunesdb_path (GMount *mount)
         return result;
 }
 
-static guint64 get_fs_property (const char *mountpoint, const char *attr)
+guint64 get_fs_property (const char *mountpoint, const char *attr)
 {
         GFile *root;
         GFileInfo *info;
@@ -407,85 +403,6 @@ rb_ipod_helpers_mount_has_ipod_db (GMount *mount)
         return result;
 }
 
-#ifdef HAVE_HAL
-static gboolean
-volume_is_ipod (GVolume *volume)
-{
-	LibHalContext *ctx;
-	DBusConnection *conn;
-	char *parent_udi, *udi;
-	char **methods_list;
-	guint i;
-	gboolean result;
-	DBusError error;
-	gboolean inited = FALSE;
-
-	result = FALSE;
-	dbus_error_init (&error);
-
-	udi = NULL;
-	conn = NULL;
-	parent_udi = NULL;
-	methods_list = NULL;
-
-	ctx = libhal_ctx_new ();
-	if (ctx == NULL) {
-		/* FIXME: should we return an error somehow so that we can
-		 * fall back to a check for iTunesDB presence instead ?
-		 */
-		rb_debug ("cannot connect to HAL");
-		goto end;
-	}
-	conn = dbus_bus_get (DBUS_BUS_SYSTEM, &error);
-	if (conn == NULL || dbus_error_is_set (&error))
-		goto end;
-
-	libhal_ctx_set_dbus_connection (ctx, conn);
-	if (!libhal_ctx_init (ctx, &error) || dbus_error_is_set (&error))
-		goto end;
-
-	udi = rb_gvolume_get_udi (volume, ctx);
-	if (udi == NULL)
-		goto end;
-
-	inited = TRUE;
-	parent_udi = libhal_device_get_property_string (ctx, udi,
-							"info.parent", &error);
-	if (parent_udi == NULL || dbus_error_is_set (&error))
-		goto end;
-	methods_list = libhal_device_get_property_strlist (ctx, parent_udi,
-							   "portable_audio_player.access_method.protocols", &error);
-	if (methods_list == NULL || dbus_error_is_set (&error))
-		goto end;
-	for (i = 0; methods_list[i] != NULL; i++) {
-		if (strcmp ("ipod", methods_list[i]) == 0) {
-			result = TRUE;
-			break;
-		}
-	}
-
-end:
-	g_free (udi);
-	g_free (parent_udi);
-	libhal_free_string_array (methods_list);
-
-	if (dbus_error_is_set (&error)) {
-		rb_debug ("Error: %s\n", error.message);
-		dbus_error_free (&error);
-		dbus_error_init (&error);
-	}
-
-	if (ctx) {
-		if (inited)
-			libhal_ctx_shutdown (ctx, &error);
-		libhal_ctx_free(ctx);
-	}
-
-	dbus_error_free (&error);
-
-	return result;
-}
-
 gboolean
 rb_ipod_helpers_is_ipod (GMount *mount, MPIDDevice *device_info)
 {
@@ -499,7 +416,7 @@ rb_ipod_helpers_is_ipod (GMount *mount, MPIDDevice *device_info)
 	g_object_get (device_info, "access-protocols", &protocols, NULL);
 	if (protocols != NULL && g_strv_length (protocols) > 0) {
 		int i;
-
+		
 		for (i = 0; protocols[i] != NULL; i++) {
 			if (g_str_equal (protocols[i], "ipod")) {
 				result = TRUE;
@@ -522,7 +439,7 @@ rb_ipod_helpers_is_ipod (GMount *mount, MPIDDevice *device_info)
 						result = g_file_test (device_dir,
 								      G_FILE_TEST_IS_DIR);
 						g_free (device_dir);
-					}
+					}   
 				}
 
 				g_free (mount_point);
@@ -534,98 +451,14 @@ rb_ipod_helpers_is_ipod (GMount *mount, MPIDDevice *device_info)
 	g_strfreev (protocols);
 	return result;
 }
-#endif
-
-#ifdef HAVE_HAL
-static char *
-volume_get_serial (GVolume *volume)
-{
-	LibHalContext *ctx;
-	DBusConnection *conn;
-	char *parent_udi, *udi;
-	char *result;
-	DBusError error;
-	gboolean inited = FALSE;
-
-	result = NULL;
-	dbus_error_init (&error);
-
-	udi = NULL;
-	conn = NULL;
-
-	ctx = libhal_ctx_new ();
-	if (ctx == NULL) {
-		rb_debug ("cannot connect to HAL");
-		goto end;
-	}
-	conn = dbus_bus_get (DBUS_BUS_SYSTEM, &error);
-	if (conn == NULL || dbus_error_is_set (&error))
-		goto end;
-
-	libhal_ctx_set_dbus_connection (ctx, conn);
-	if (!libhal_ctx_init (ctx, &error) || dbus_error_is_set (&error))
-		goto end;
-
-	udi = rb_gvolume_get_udi (volume, ctx);
-	if (udi == NULL)
-		goto end;
-
-	inited = TRUE;
-	parent_udi = libhal_device_get_property_string (ctx, udi,
-							"info.parent", &error);
-	if (parent_udi == NULL || dbus_error_is_set (&error))
-		goto end;
-	result = libhal_device_get_property_string (ctx, parent_udi,
-						    "storage.serial", &error);
-
-end:
-	g_free (parent_udi);
-	g_free (udi);
-
-	if (dbus_error_is_set (&error)) {
-		rb_debug ("Error: %s\n", error.message);
-		dbus_error_free (&error);
-		dbus_error_init (&error);
-	}
-
-	if (ctx) {
-		if (inited)
-			libhal_ctx_shutdown (ctx, &error);
-		libhal_ctx_free(ctx);
-	}
-
-	dbus_error_free (&error);
-
-	return result;
-}
 
 char *
-rb_ipod_helpers_get_serial (GMount *mount)
+rb_ipod_helpers_get_serial (GMount *mount, MPIDDevice *device_info)
 {
-	char *result;
-	GVolume *volume;
-
-	volume = g_mount_get_volume (mount);
-	if (volume == NULL)
-		return NULL;
-
-	result = volume_get_serial (volume);
-	g_object_unref (volume);
-
-	return result;
-}
-
-#else
-
-char *
-rb_ipod_helpers_get_serial (GMount *mount)
-{
-	/* FIXME: What do we do to find the serial without HAL???
+	/* FIXME: What do we do to find the serial with libmediaplayerid????
 	 */
 	 return NULL;
 }
-
-#endif
 
 gboolean rb_ipod_helpers_needs_init (GMount *mount)
 {

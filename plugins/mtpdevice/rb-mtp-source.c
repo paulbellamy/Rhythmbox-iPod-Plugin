@@ -547,7 +547,6 @@ rb_mtp_source_new (RBShell *shell,
 	g_object_unref (db);
 
 	source = RB_MTP_SOURCE (g_object_new (RB_TYPE_MTP_SOURCE,
-					      "plugin", plugin,
 					      "entry-type", entry_type,
 					      "shell", shell,
 					      "visibility", TRUE,
@@ -557,7 +556,7 @@ rb_mtp_source_new (RBShell *shell,
 #if !defined(HAVE_GUDEV)
 					      "udi", udi,
 #endif
-						  "key-file", key_file,
+					      "key-file", key_file,
 					      NULL));
 
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);

@@ -126,6 +126,8 @@ typedef struct
 {
 	RbIpodDb *ipod_db;
 	GHashTable *entry_map;
+	
+	MPIDDevice *device_info;
 
 	gboolean needs_shuffle_db;
 	RBIpodStaticPlaylistSource *podcast_pl;
@@ -190,6 +192,13 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	rms_class->impl_get_mime_types = impl_get_mime_types;
 
 	browser_source_class->impl_get_paned_key = impl_get_paned_key;
+	
+	g_object_class_install_property (object_class,
+					 1,
+					 g_param_spec_pointer ("device-info",
+							       "device-info",
+							       "LibMediaPlayerID Device Info",
+							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
 	g_type_class_add_private (klass, sizeof (RBiPodSourcePrivate));
 }
@@ -316,6 +325,7 @@ RBMediaPlayerSource *
 rb_ipod_source_new (RBPlugin *plugin,
 		    RBShell *shell,
 		    GMount *mount,
+		    MPIDDevice *device_info,
 		    GKeyFile **key_file)
 {
 	RBiPodSource *source;
@@ -346,6 +356,7 @@ rb_ipod_source_new (RBPlugin *plugin,
 					       "mount", mount,
 					       "shell", shell,
 					       "source-group", RB_SOURCE_GROUP_DEVICES,
+					       "device-info", device_info,
 					       "key-file", key_file,
 					       NULL));
 
@@ -1809,9 +1820,13 @@ static gchar *
 impl_get_serial (RBMediaPlayerSource *source)
 {
 	GMount *mount;
-	g_object_get (source, "mount", &mount, NULL);
+	MPIDDevice *device_info;
+	g_object_get (source,
+		      "mount", &mount,
+		      "device-info", &device_info,
+		      NULL);
 	
-	gchar *serial = rb_ipod_helpers_get_serial (mount);
+	gchar *serial = rb_ipod_helpers_get_serial (mount, device_info);
 	
 	g_object_unref (mount);
 	return serial;
