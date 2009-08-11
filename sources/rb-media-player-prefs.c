@@ -122,45 +122,6 @@ static GKeyFile * rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs,
 static void
 rb_media_player_prefs_init (RBMediaPlayerPrefs *prefs)
 {
-	g_assert (prefs != NULL);
-	
-	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
-	
-	priv->group = rb_media_player_source_get_serial ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
-	if (priv->group == NULL) {
-		// Couldn't get the serial, use the ipod name
-		priv->group = rb_media_player_source_get_name ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
-	}
-	
-	// add the group and keys, unless it exists
-	if ( !g_key_file_has_group(priv->key_file, priv->group) ) {
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", FALSE);
-		g_key_file_set_string_list (priv->key_file, priv->group, "sync_playlists_list", (const gchar * const *) "", 0);
-		g_key_file_set_string_list (priv->key_file, priv->group, "sync_podcasts_list", (const gchar * const *) "", 0);
-		
-	}
-	
-	// Load initial values from the file
-	priv->sync_auto = g_key_file_get_boolean (priv->key_file, priv->group, "sync_auto", NULL);
-	priv->sync_music = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music", NULL);
-	priv->sync_music_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music_all", NULL);
-	priv->sync_podcasts = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts", NULL);
-	priv->sync_podcasts_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts_all", NULL);
-	
-	priv->sync_playlists_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
-											    "sync_playlists_list",
-											    NULL,
-											    NULL) );
-	priv->sync_podcasts_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
-											   "sync_podcasts_list",
-											   NULL,
-											   NULL) );
-	
-	priv->sync_updated = FALSE;
 }
 
 static void
@@ -190,6 +151,9 @@ rb_media_player_prefs_dispose (GObject *object)
 		
 	if (priv->device_hash != NULL)	
 		g_hash_table_unref (priv->device_hash);
+	
+	if (priv->source != NULL)
+		g_object_unref (priv->source);
 	
 	if (priv->shell != NULL)
 		g_object_unref (priv->shell);
@@ -731,6 +695,41 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 		prefs = NULL;
 		return NULL;
 	}
+	
+	priv->group = rb_media_player_source_get_serial ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
+	if (priv->group == NULL) {
+		// Couldn't get the serial, use the ipod name
+		priv->group = rb_media_player_source_get_name ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
+	}
+	
+	// add the group and keys, unless it exists
+	if ( !g_key_file_has_group(priv->key_file, priv->group) ) {
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", FALSE);
+		g_key_file_set_string_list (priv->key_file, priv->group, "sync_playlists_list", (const gchar * const *) "", 0);
+		g_key_file_set_string_list (priv->key_file, priv->group, "sync_podcasts_list", (const gchar * const *) "", 0);
+	}
+	
+	// Load initial values from the file
+	priv->sync_auto = g_key_file_get_boolean (priv->key_file, priv->group, "sync_auto", NULL);
+	priv->sync_music = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music", NULL);
+	priv->sync_music_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music_all", NULL);
+	priv->sync_podcasts = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts", NULL);
+	priv->sync_podcasts_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts_all", NULL);
+	
+	priv->sync_playlists_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
+											    "sync_playlists_list",
+											    NULL,
+											    NULL) );
+	priv->sync_podcasts_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
+											   "sync_podcasts_list",
+											   NULL,
+											   NULL) );
+	
+	priv->sync_updated = FALSE;
 
      	return prefs;
 }
@@ -810,7 +809,7 @@ rb_media_player_prefs_set_boolean ( RBMediaPlayerPrefs *prefs,
 					g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", value);
 					break;
 		case SYNC_UPDATED:	priv->sync_updated = value;
-					break;
+					return;
 		default:		break;
 	}
 	

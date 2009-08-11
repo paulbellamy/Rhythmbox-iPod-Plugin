@@ -326,7 +326,7 @@ rb_ipod_source_constructor (GType type, guint n_construct_properties,
 
 	source = RB_IPOD_SOURCE (G_OBJECT_CLASS (rb_ipod_source_parent_class)->
 			constructor (type, n_construct_properties, construct_properties));
-
+	
 	RBEntryView *songs;
 	
 	songs = rb_source_get_entry_view (RB_SOURCE (source));
