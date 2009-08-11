@@ -115,6 +115,15 @@ static gchar * impl_get_serial (RBMediaPlayerSource *source);
 static gchar * impl_get_name (RBMediaPlayerSource *source);
 static void impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs);
 
+static void rb_ipod_source_set_property (GObject *object,
+					 guint prop_id,
+					 const GValue *value,
+					 GParamSpec *pspec);
+static void rb_ipod_source_get_property (GObject *object,
+					 guint prop_id,
+					 GValue *value,
+					 GParamSpec *pspec);
+
 static void add_to_playlist (RBiPodSource *source, Itdb_Track *song, Itdb_Playlist *playlist);
 
 static void connect_signal_handlers (RBiPodSource *source);
@@ -153,6 +162,12 @@ typedef struct {
 	GdkPixbuf *pixbuf;
 } RBiPodSongArtworkAddData;
 
+enum
+{
+	PROP_0,
+	PROP_DEVICE_INFO
+};
+
 RB_PLUGIN_DEFINE_TYPE(RBiPodSource,
 		      rb_ipod_source,
 		      RB_TYPE_MEDIA_PLAYER_SOURCE)
@@ -170,6 +185,9 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 
 	object_class->constructor = rb_ipod_source_constructor;
 	object_class->dispose = rb_ipod_source_dispose;
+	
+	object_class->set_property = rb_ipod_source_set_property;
+	object_class->get_property = rb_ipod_source_get_property;
 	
 	source_class->impl_can_browse = (RBSourceFeatureFunc) rb_true_function;
 	source_class->impl_get_browser_key  = impl_get_browser_key;
@@ -201,13 +219,49 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	browser_source_class->impl_get_paned_key = impl_get_paned_key;
 	
 	g_object_class_install_property (object_class,
-					 1,
+					 PROP_DEVICE_INFO,
 					 g_param_spec_pointer ("device-info",
 							       "device-info",
 							       "LibMediaPlayerID Device Info",
 							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
 	g_type_class_add_private (klass, sizeof (RBiPodSourcePrivate));
+}
+
+static void
+rb_ipod_source_set_property (GObject *object,
+			     guint prop_id,
+			     const GValue *value,
+			     GParamSpec *pspec)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_DEVICE_INFO:
+		priv->device_info = g_value_get_pointer (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
+}
+
+static void
+rb_ipod_source_get_property (GObject *object,
+			     guint prop_id,
+			     GValue *value,
+			     GParamSpec *pspec)
+{
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_DEVICE_INFO:
+		g_value_set_pointer (value, priv->device_info);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
 }
 
 static void
@@ -269,11 +323,12 @@ rb_ipod_source_constructor (GType type, guint n_construct_properties,
 			    GObjectConstructParam *construct_properties)
 {
 	RBiPodSource *source;
-	RBEntryView *songs;
 
 	source = RB_IPOD_SOURCE (G_OBJECT_CLASS (rb_ipod_source_parent_class)->
 			constructor (type, n_construct_properties, construct_properties));
 
+	RBEntryView *songs;
+	
 	songs = rb_source_get_entry_view (RB_SOURCE (source));
 	rb_entry_view_append_column (songs, RB_ENTRY_VIEW_COL_RATING, FALSE);
 	rb_entry_view_append_column (songs, RB_ENTRY_VIEW_COL_LAST_PLAYED, FALSE);
@@ -282,6 +337,8 @@ rb_ipod_source_constructor (GType type, guint n_construct_properties,
 	rb_ipod_load_songs (source);
 
         connect_signal_handlers (source);
+        
+        rb_media_player_source_load (RB_MEDIA_PLAYER_SOURCE (source));
 	
 	return G_OBJECT (source);
 }
@@ -1842,7 +1899,10 @@ impl_get_serial (RBMediaPlayerSource *source)
 static gchar *
 impl_get_name (RBMediaPlayerSource *source)
 {
-	return g_strdup (rb_ipod_db_get_ipod_name ((IPOD_SOURCE_GET_PRIVATE ((RBiPodSource *)source))->ipod_db));
+	RBiPodSource *isource = RB_IPOD_SOURCE (source);
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (isource);
+	const gchar *name = rb_ipod_db_get_ipod_name (priv->ipod_db);
+	return g_strdup (name);
 }
 
 static void

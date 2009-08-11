@@ -74,6 +74,8 @@ typedef struct
 /* used by RB_TYPE_MEDIA_PLAYER_SOURCE */
 GType			rb_media_player_source_get_type	(void);
 
+void	rb_media_player_source_load		(RBMediaPlayerSource *source);
+
 GHashTable * rb_media_player_source_get_entries (RBMediaPlayerSource *source);
 GHashTable * rb_media_player_source_get_podcasts (RBMediaPlayerSource *source);
 

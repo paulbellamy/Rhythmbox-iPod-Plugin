@@ -51,7 +51,7 @@ static void rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass);
 static GObject *rb_media_player_source_constructor (GType type, 
 					    guint n_construct_properties,
 					    GObjectConstructParam *construct_properties);
-static void rb_media_player_source_init (RBMediaPlayerSource *self);
+static void rb_media_player_source_init (RBMediaPlayerSource *source);
 static void rb_media_player_source_dispose (GObject *object);
 
 static void connect_signal_handlers (GObject *source);
@@ -124,13 +124,6 @@ rb_media_player_source_constructor (GType type,
 	source = G_OBJECT_CLASS(rb_media_player_source_parent_class)
 				->constructor (type, n_construct_properties, construct_properties);
 	
-	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
-	
-	priv->prefs = rb_media_player_prefs_new ( priv->key_file,
-						  G_OBJECT (source) );
-	
-	connect_signal_handlers (G_OBJECT (source));
-	
 	return G_OBJECT (source);
 }
 
@@ -150,9 +143,8 @@ rb_media_player_source_dispose (GObject *object)
 }
 
 static void
-rb_media_player_source_init (RBMediaPlayerSource *self)
+rb_media_player_source_init (RBMediaPlayerSource *source)
 {
-	/* initialize the object */
 }
 
 static void
@@ -189,6 +181,18 @@ rb_media_player_source_get_property (GObject *object,
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
 	}
+}
+
+/* Must be called in the 'instance_init' method of any children */
+void
+rb_media_player_source_load		(RBMediaPlayerSource *source)
+{
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	
+	priv->prefs = rb_media_player_prefs_new ( priv->key_file,
+						  G_OBJECT (source) );
+	
+	connect_signal_handlers (G_OBJECT (source));
 }
 
 GHashTable *
@@ -355,6 +359,63 @@ rb_media_player_source_show_properties (RBMediaPlayerSource *source)
 	return klass->impl_show_properties (source, priv->prefs);
 }
 
+static void
+impl_sync_playlists (RBMediaPlayerSource *source)
+{
+	/* FIXME: WTF!? How should this work!!! */
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	
+	// Make sure the hash tables are created/updated
+	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED))
+		rb_media_player_prefs_update_sync (priv->prefs);
+	
+	/*
+	GList *iter, *entries, *lib_playlists;
+	GHashTable *to_add;
+	GHashTableIter hash_iter;
+	gpointer key, value;
+	RBShell *shell;
+	GtkTreeModel *query_model;
+	
+	g_object_get (G_OBJECT (source), "shell", &shell, NULL);
+	lib_playlists = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
+	
+	to_add = rb_media_player_prefs_get_hash_table (priv->prefs, SYNC_PLAYLISTS_LIST);
+	
+	for (iter = playlists_on_device;
+	     iter != NULL;
+	     iter = iter->next)
+	{
+		// For each playlist on the device
+			// Check if it should be there
+			if (g_hash_table_lookup (to_add, iter->data)) {
+				// If it should be, remove it from the list to add
+				g_hash_table_remove (to_add, iter->data);
+			} else {
+				// If it shouldn't be there, remove it
+				rb_media_player_source_trash_playlist (source, iter->data);
+			}
+	}
+	
+	// For each playlist remaining in the list to add
+	g_hash_table_iter_init (&hash_iter, to_add);
+	while (g_hash_table_iter_next (&hash_iter, &key, &value)) {
+		// Get it's entries
+		query_model = GTK_TREE_MODEL (rb_playlist_source_get_query_model (list_iter->data));
+				
+		// Add the entries to the hash_table
+		gtk_tree_model_foreach (query_model,
+					(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
+					&insertion_data);
+		
+		// Add it
+		rb_media_player_source_add_playlist (source, key, entries);
+	}
+	
+	g_object_unref (shell);
+	*/
+}
+
 
 void
 rb_media_player_source_sync (RBMediaPlayerSource *source)
@@ -375,13 +436,16 @@ rb_media_player_source_sync (RBMediaPlayerSource *source)
 	rb_media_player_source_trash_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
 	
 	// Done with this list, clear it.
-	rb_media_player_prefs_set_list(priv->prefs, SYNC_TO_REMOVE, NULL);
+	rb_media_player_prefs_set_list (priv->prefs, SYNC_TO_REMOVE, NULL);
 	
 	// Transfer needed tracks and podcasts from itinerary to device
 	rb_media_player_source_add_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_ADD) );
 	
 	// Done with this list, clear it.
-	rb_media_player_prefs_set_list(priv->prefs, SYNC_TO_ADD, NULL);
+	rb_media_player_prefs_set_list (priv->prefs, SYNC_TO_ADD, NULL);
+	
+	// Transfer the playlists
+	impl_sync_playlists (source);
 	
 	// Set needs Update
 	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);

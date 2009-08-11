@@ -281,6 +281,8 @@ rb_mtp_source_init (RBMtpSource *source)
 						 NULL,
 						 (GDestroyNotify) LIBMTP_destroy_album_t);
 	priv->artwork_request_map = g_hash_table_new (g_direct_hash, g_direct_equal);
+	
+	rb_media_player_source_load (RB_MEDIA_PLAYER_SOURCE (source));
 }
 
 static GObject *

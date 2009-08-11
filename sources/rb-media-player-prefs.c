@@ -68,6 +68,14 @@ typedef struct {
 	
 } RBMediaPlayerPrefsPrivate;
 
+enum {
+	PROP_0,
+	
+	PROP_SHELL,
+	PROP_DB,
+	PROP_SOURCE
+};
+
 G_DEFINE_TYPE (RBMediaPlayerPrefs, rb_media_player_prefs, G_TYPE_OBJECT)
 
 #define MEDIA_PLAYER_PREFS_GET_PRIVATE(o)   (G_TYPE_INSTANCE_GET_PRIVATE ((o), RB_TYPE_MEDIA_PLAYER_PREFS, RBMediaPlayerPrefsPrivate))
@@ -77,6 +85,7 @@ static void rb_media_player_prefs_dispose (GObject *object);
 static void rb_media_player_prefs_class_init (RBMediaPlayerPrefsClass *klass);
 
 static gchar ** hash_table_to_string_list (GHashTable * hash_table);
+
 static GHashTable * string_list_to_hash_table (const gchar ** string_list);
 
 static void rb_media_player_prefs_hash_table_compare (gpointer key,
@@ -87,6 +96,15 @@ static void rb_media_player_prefs_hash_table_insert (gpointer key,
 						     gpointer user_data);
 
 static guint64 rb_media_player_prefs_calculate_space_needed (RBMediaPlayerPrefs *prefs);
+
+static void rb_media_player_prefs_set_property (GObject *object,
+					 guint prop_id,
+					 const GValue *value,
+					 GParamSpec *pspec);
+static void rb_media_player_prefs_get_property (GObject *object,
+					 guint prop_id,
+					 GValue *value,
+					 GParamSpec *pspec);
 
 static void hash_table_duplicate (GHashTable **hash1, GHashTable *hash2);
 static void hash_table_insert_all (RBMediaPlayerPrefs *prefs,
@@ -101,11 +119,48 @@ static void hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 static GKeyFile * rb_media_player_prefs_load_file (RBMediaPlayerPrefs *prefs,
 						   GError **error);
 
-
-
 static void
 rb_media_player_prefs_init (RBMediaPlayerPrefs *prefs)
 {
+	g_assert (prefs != NULL);
+	
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	
+	priv->group = rb_media_player_source_get_serial ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
+	if (priv->group == NULL) {
+		// Couldn't get the serial, use the ipod name
+		priv->group = rb_media_player_source_get_name ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
+	}
+	
+	// add the group and keys, unless it exists
+	if ( !g_key_file_has_group(priv->key_file, priv->group) ) {
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", FALSE);
+		g_key_file_set_string_list (priv->key_file, priv->group, "sync_playlists_list", (const gchar * const *) "", 0);
+		g_key_file_set_string_list (priv->key_file, priv->group, "sync_podcasts_list", (const gchar * const *) "", 0);
+		
+	}
+	
+	// Load initial values from the file
+	priv->sync_auto = g_key_file_get_boolean (priv->key_file, priv->group, "sync_auto", NULL);
+	priv->sync_music = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music", NULL);
+	priv->sync_music_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music_all", NULL);
+	priv->sync_podcasts = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts", NULL);
+	priv->sync_podcasts_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts_all", NULL);
+	
+	priv->sync_playlists_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
+											    "sync_playlists_list",
+											    NULL,
+											    NULL) );
+	priv->sync_podcasts_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
+											   "sync_podcasts_list",
+											   NULL,
+											   NULL) );
+	
+	priv->sync_updated = FALSE;
 }
 
 static void
@@ -167,6 +222,28 @@ rb_media_player_prefs_class_init (RBMediaPlayerPrefsClass *klass)
 
 	object_class->constructor = rb_media_player_prefs_constructor;
 	object_class->dispose = rb_media_player_prefs_dispose;
+	
+	object_class->set_property = rb_media_player_prefs_set_property;
+	object_class->get_property = rb_media_player_prefs_get_property;
+	
+	g_object_class_install_property (object_class,
+					 PROP_SHELL,
+					 g_param_spec_pointer ("shell",
+							       "shell",
+							       "Pointer to the RBShell",
+							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+	g_object_class_install_property (object_class,
+					 PROP_DB,
+					 g_param_spec_pointer ("db",
+							       "db",
+							       "Pointer to the RhythmDB",
+							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+	g_object_class_install_property (object_class,
+					 PROP_SOURCE,
+					 g_param_spec_pointer ("source",
+							       "source",
+							       "Pointer to the RBMediaPlayerSource",
+							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
 	g_type_class_add_private (klass, sizeof (RBMediaPlayerPrefsPrivate));
 }
@@ -321,6 +398,54 @@ rb_media_player_prefs_calculate_space_needed (RBMediaPlayerPrefs *prefs)
 	//g_print("Space Needed: %s\n", g_format_size_for_display (priv->sync_space_needed));
 	
 	return priv->sync_space_needed;
+}
+
+static void
+rb_media_player_prefs_set_property (GObject *object,
+			     guint prop_id,
+			     const GValue *value,
+			     GParamSpec *pspec)
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_SHELL:
+		priv->shell = g_value_get_pointer (value);
+		break;
+	case PROP_DB:
+		priv->db = g_value_get_pointer (value);
+		break;
+	case PROP_SOURCE:
+		priv->source = g_value_get_pointer (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
+}
+
+static void
+rb_media_player_prefs_get_property (GObject *object,
+			     guint prop_id,
+			     GValue *value,
+			     GParamSpec *pspec)
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (object);
+
+	switch (prop_id) {
+	case PROP_SHELL:
+		g_value_set_pointer (value, priv->shell);
+		break;
+	case PROP_DB:
+		g_value_set_pointer (value, priv->db);
+		break;
+	case PROP_SOURCE:
+		g_value_set_pointer (value, priv->source);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
 }
 
 /* Duplicates hash2 into hash1 */
@@ -575,17 +700,25 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 {
 	g_return_val_if_fail (key_file != NULL, NULL);
 	g_return_val_if_fail (source != NULL, NULL);
-
-	RBMediaPlayerPrefs *prefs = g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS, NULL);
+	
+	RBMediaPlayerPrefs *prefs;
+	RBShell *shell;
+	RhythmDB *db;
+	RBMediaPlayerSource *mp_source = RB_MEDIA_PLAYER_SOURCE (source);
+	g_object_get (mp_source, "shell", &shell, NULL);
+	g_object_get (shell, "db", &db, NULL);
+	
+	prefs = RB_MEDIA_PLAYER_PREFS (g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS,
+						     "source", mp_source,
+						     "shell", shell,
+						     "db", db,
+						     NULL));
 	
 	g_return_val_if_fail (prefs != NULL, NULL);
 	
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
-	GError *error = NULL;
 	
-	g_object_get (source, "shell", &priv->shell, NULL);
-	g_object_get (priv->shell, "db", &priv->db, NULL);
-	priv->source = RB_MEDIA_PLAYER_SOURCE (source);
+	GError *error = NULL;
 	
 	// Load the key_file if it isn't already
 	if (*key_file == NULL)
@@ -598,42 +731,6 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 		prefs = NULL;
 		return NULL;
 	}
-	
-	priv->group = rb_media_player_source_get_serial ( RB_MEDIA_PLAYER_SOURCE (source) );
-	if (priv->group == NULL) {
-		// Couldn't get the serial, use the ipod name
-		priv->group = g_strdup(rb_media_player_source_get_name ( RB_MEDIA_PLAYER_SOURCE (source) ) );
-	}
-	
-	// add the group and keys, unless it exists
-	if ( !g_key_file_has_group(priv->key_file, priv->group) ) {
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", FALSE);
-		g_key_file_set_string_list (priv->key_file, priv->group, "sync_playlists_list", (const gchar * const *) "", 0);
-		g_key_file_set_string_list (priv->key_file, priv->group, "sync_podcasts_list", (const gchar * const *) "", 0);
-		
-	}
-	
-	// Load initial values from the file
-	priv->sync_auto = g_key_file_get_boolean (priv->key_file, priv->group, "sync_auto", NULL);
-	priv->sync_music = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music", NULL);
-	priv->sync_music_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music_all", NULL);
-	priv->sync_podcasts = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts", NULL);
-	priv->sync_podcasts_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_podcasts_all", NULL);
-	
-	priv->sync_playlists_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
-											    "sync_playlists_list",
-											    NULL,
-											    NULL) );
-	priv->sync_podcasts_list = string_list_to_hash_table ( (const gchar **) g_key_file_get_string_list (priv->key_file, priv->group,
-											   "sync_podcasts_list",
-											   NULL,
-											   NULL) );
-	
-	priv->sync_updated = FALSE;
 
      	return prefs;
 }
@@ -666,6 +763,23 @@ rb_media_player_prefs_get_string_list ( RBMediaPlayerPrefs *prefs,
 			return hash_table_to_string_list (priv->sync_playlists_list);
 		case SYNC_PODCASTS_LIST:
 			return hash_table_to_string_list (priv->sync_podcasts_list);
+		default:
+			g_assert_not_reached();
+			return NULL;
+	}
+}
+
+GHashTable *
+rb_media_player_prefs_get_hash_table (RBMediaPlayerPrefs *prefs,
+				      guint prop_id)
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			return priv->sync_playlists_list;
+		case SYNC_PODCASTS_LIST:
+			return priv->sync_podcasts_list;
 		default:
 			g_assert_not_reached();
 			return NULL;

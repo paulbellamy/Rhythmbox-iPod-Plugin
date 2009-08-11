@@ -79,6 +79,8 @@ void	 rb_media_player_prefs_set_boolean	( RBMediaPlayerPrefs *prefs,
 						  gboolean value );
 gchar ** rb_media_player_prefs_get_string_list	( RBMediaPlayerPrefs *prefs,
 						  guint prop_id );
+GHashTable * rb_media_player_prefs_get_hash_table (RBMediaPlayerPrefs *prefs,
+						   guint prop_id);
 void	 rb_media_player_prefs_set_list		( RBMediaPlayerPrefs *prefs,
 						  guint prop_id,
 						  GList * list );
