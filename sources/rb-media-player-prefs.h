@@ -91,6 +91,9 @@ void	 rb_media_player_prefs_set_entry	( RBMediaPlayerPrefs *prefs,
 						  guint prop_id,
 						  const gchar * entry,
 						  gboolean value );
+gboolean rb_media_player_prefs_get_entry_value ( RBMediaPlayerPrefs *prefs,
+						 guint prop_id,
+						 const gchar * entry );
 guint64	 rb_media_player_prefs_get_uint64	( RBMediaPlayerPrefs *prefs,
 						  guint prop_id );
 void	 rb_media_player_prefs_set_uint64	( RBMediaPlayerPrefs *prefs,

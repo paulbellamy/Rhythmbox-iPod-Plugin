@@ -104,6 +104,13 @@ static void rb_mtp_info_response_cb (GtkDialog *dialog,
 static void rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 					 gpointer         user_data);
 
+static void rb_mtp_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
+					      gpointer         user_data);
+
+static void rb_mtp_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
+						 gpointer         user_data);
+				      
+
 static GHashTable *	impl_get_entries	(RBMediaPlayerSource *source);
 static GHashTable *	impl_get_podcasts	(RBMediaPlayerSource *source);
 static guint64		impl_get_capacity	(RBMediaPlayerSource *source);
@@ -1332,14 +1339,6 @@ rb_mtp_info_response_cb (GtkDialog *dialog,
 	}
 }
 
-static void
-rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
-			     gpointer         user_data)
-{
-	rb_media_player_prefs_set_boolean (RB_MEDIA_PLAYER_PREFS (user_data),
-				   	   SYNC_AUTO,
-				   	   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
-}
 
 typedef struct {
 	RBMediaPlayerPrefs *prefs;
@@ -1348,6 +1347,90 @@ typedef struct {
 	GtkProgressBar *preview_bar;
 	RBMediaPlayerSource *source;
 } RBMtpSyncEntriesChangedData;
+
+static void
+rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
+			     gpointer         user_data)
+{
+	RBMtpSyncEntriesChangedData *data = user_data;
+	rb_media_player_prefs_set_boolean (data->prefs,
+				   	   SYNC_AUTO,
+				   	   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
+}
+
+static void
+set_treeview_children (RBMtpSyncEntriesChangedData *data,
+		       GtkTreeIter *parent,
+		       guint list,
+		       gboolean value)
+{
+	GtkTreeIter iter;
+//	GtkCellRendererToggle *toggle;
+	gchar *name;
+	gboolean valid;
+	
+	valid = gtk_tree_model_iter_children (GTK_TREE_MODEL (data->tree_store), &iter, parent);
+		
+	while (valid) {
+		gtk_tree_model_get (GTK_TREE_MODEL (data->tree_store), &iter,
+				    1, &name,
+				    -1);
+		gtk_tree_store_set (data->tree_store, &iter,
+				    0, rb_media_player_prefs_get_entry_value (data->prefs, list, name),
+				    2, value,
+				    -1);
+		
+		g_free (name);
+		valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (data->tree_store), &iter);
+	}
+}
+
+static void
+rb_mtp_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
+				   gpointer         user_data)
+{
+	RBMtpSyncEntriesChangedData *data = user_data;
+	gboolean value = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton));
+	rb_media_player_prefs_set_boolean (data->prefs,
+				   SYNC_MUSIC_ALL,
+				   value);
+	
+	GtkTreeIter iter;
+	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "0") == TRUE) {
+		gtk_tree_store_set (data->tree_store, &iter,
+		/* Activatable */   2, !value,
+				    -1);
+		
+		set_treeview_children (user_data,
+				       &iter,
+				       SYNC_PLAYLISTS_LIST,
+				       !value);
+	}
+	
+}
+
+static void
+rb_mtp_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
+				      gpointer         user_data)
+{
+	RBMtpSyncEntriesChangedData *data = user_data;
+	gboolean value = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton));
+	rb_media_player_prefs_set_boolean (data->prefs,
+				   SYNC_PODCASTS_ALL,
+				   value);
+	
+	GtkTreeIter iter;
+	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "1") == TRUE) {
+		gtk_tree_store_set (data->tree_store, &iter,
+		/* Activatable */   2, !value,
+				    -1);
+		
+		set_treeview_children (user_data,
+				       &iter,
+				       SYNC_PODCASTS_LIST,
+				       !value);
+	}
+}
 
 static void
 update_sync_preview_bar (RBMtpSyncEntriesChangedData *data) {
@@ -1369,33 +1452,6 @@ update_sync_preview_bar (RBMtpSyncEntriesChangedData *data) {
 	g_free (text);
 	g_free (capacity);
 	g_free (used);
-}
-
-static void
-set_treeview_children (RBMtpSyncEntriesChangedData *data,
-		       GtkTreeIter *parent,
-		       guint list,
-		       gboolean value)
-{
-	GtkTreeIter iter;
-//	GtkCellRendererToggle *toggle;
-	gchar *name;
-	gboolean valid;
-	
-	valid = gtk_tree_model_iter_children (GTK_TREE_MODEL (data->tree_store), &iter, parent);
-		
-	while (valid) {
-		gtk_tree_model_get (GTK_TREE_MODEL (data->tree_store), &iter,
-				    1, &name,
-				    -1);
-		gtk_tree_store_set (data->tree_store, &iter,
-				    0, rb_media_player_prefs_get_entry (data->prefs, list, name) && value,
-				    2, value,
-				    -1);
-		
-		g_free (name);
-		valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (data->tree_store), &iter);
-	}
 }
 
 static void
@@ -1528,12 +1584,6 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_free (capacity);
 	g_free (used);
 	
-	label = gtk_builder_get_object (builder, "checkbutton-mtp-sync-auto");
-	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
-				      rb_media_player_prefs_get_boolean (prefs, SYNC_AUTO));
- 	g_signal_connect (label, "toggled",
- 			  (GCallback)rb_mtp_sync_auto_changed_cb, prefs);
-	
 	// Set tree models for each treeview
 	// tree_store columns are: Active, Name, Activatable
 	GtkTreeStore *tree_store = gtk_tree_store_new (3, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
@@ -1650,6 +1700,27 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	
 	g_object_unref (shell);
 	g_object_unref (tree_store);
+	
+	label = gtk_builder_get_object (builder, "checkbutton-mtp-sync-auto");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      rb_media_player_prefs_get_boolean (prefs, SYNC_AUTO));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_mtp_sync_auto_changed_cb,
+ 			  entries_changed_data);
+	
+	label = gtk_builder_get_object (builder, "checkbutton-mtp-sync-music-all");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_mtp_sync_music_all_changed_cb,
+ 			  entries_changed_data);
+	
+	label = gtk_builder_get_object (builder, "checkbutton-mtp-sync-podcasts-all");
+	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
+				      rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL));
+ 	g_signal_connect (label, "toggled",
+ 			  (GCallback)rb_mtp_sync_podcasts_all_changed_cb,
+ 			  entries_changed_data);
 	
 	// Set up the Sync Preview Bar
 	update_sync_preview_bar (entries_changed_data);

@@ -761,6 +761,33 @@ rb_media_player_prefs_get_entry	( RBMediaPlayerPrefs *prefs,
 	}
 }
 
+/* returns whether or not an entry should be synced */
+gboolean
+rb_media_player_prefs_get_entry_value ( RBMediaPlayerPrefs *prefs,
+			  guint prop_id,
+			  const gchar * entry )
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	
+	gboolean value = (gboolean) rb_media_player_prefs_get_entry (prefs, prop_id, entry);
+	
+	switch (prop_id) {
+		case SYNC_PLAYLISTS_LIST:
+			value = value && priv->sync_music;
+			value = value || priv->sync_music_all;
+			return value;
+		
+		case SYNC_PODCASTS_LIST:
+			value = value && priv->sync_podcasts;
+			value = value || priv->sync_podcasts_all;
+			return value;
+		
+		default:
+			g_assert_not_reached();
+			return FALSE;
+	}
+}
+
 void
 rb_media_player_prefs_set_entry ( RBMediaPlayerPrefs *prefs,
 			  guint prop_id,

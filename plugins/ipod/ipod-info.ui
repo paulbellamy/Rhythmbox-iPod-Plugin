@@ -406,7 +406,7 @@
                       <object class="GtkTable" id="table-content3">
                         <property name="visible">True</property>
                         <property name="border_width">12</property>
-                        <property name="n_rows">2</property>
+                        <property name="n_rows">4</property>
                         <property name="column_spacing">12</property>
                         <property name="row_spacing">6</property>
                         <child>
@@ -433,13 +433,42 @@
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="headers_visible">False</property>
-                                <property name="headers_clickable">False</property>
                               </object>
                             </child>
                           </object>
                           <packing>
+                            <property name="top_attach">3</property>
+                            <property name="bottom_attach">4</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkCheckButton" id="checkbutton-ipod-sync-music-all">
+                            <property name="label" translatable="yes">Sync All Music</property>
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="draw_indicator">True</property>
+                          </object>
+                          <packing>
                             <property name="top_attach">1</property>
                             <property name="bottom_attach">2</property>
+                            <property name="x_options">GTK_FILL</property>
+                            <property name="y_options"></property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkCheckButton" id="checkbutton-ipod-sync-podcasts-all">
+                            <property name="label" translatable="yes">Sync All Podcasts</property>
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="draw_indicator">True</property>
+                          </object>
+                          <packing>
+                            <property name="top_attach">2</property>
+                            <property name="bottom_attach">3</property>
+                            <property name="x_options">GTK_FILL</property>
+                            <property name="y_options"></property>
                           </packing>
                         </child>
                       </object>
