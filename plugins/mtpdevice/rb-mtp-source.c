@@ -1401,13 +1401,14 @@ rb_mtp_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
 	GtkTreeIter iter;
 	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "0") == TRUE) {
 		gtk_tree_store_set (data->tree_store, &iter,
+		/* Active */	    0, rb_media_player_prefs_get_boolean (data->prefs, SYNC_MUSIC) || value,
 		/* Activatable */   2, !value,
 				    -1);
 		
 		set_treeview_children (user_data,
 				       &iter,
 				       SYNC_PLAYLISTS_LIST,
-				       !value);
+				       !value && rb_media_player_prefs_get_boolean (data->prefs, SYNC_MUSIC));
 	}
 	
 }
@@ -1425,13 +1426,14 @@ rb_mtp_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 	GtkTreeIter iter;
 	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "1") == TRUE) {
 		gtk_tree_store_set (data->tree_store, &iter,
+		/* Active */	    0, rb_media_player_prefs_get_boolean (data->prefs, SYNC_PODCASTS) || value,
 		/* Activatable */   2, !value,
 				    -1);
 		
 		set_treeview_children (user_data,
 				       &iter,
 				       SYNC_PODCASTS_LIST,
-				       !value);
+				       !value && rb_media_player_prefs_get_boolean (data->prefs, SYNC_PODCASTS));
 	}
 }
 
