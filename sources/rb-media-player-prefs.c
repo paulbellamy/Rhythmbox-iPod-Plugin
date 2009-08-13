@@ -294,6 +294,9 @@ rb_media_player_prefs_hash_table_compare (gpointer key,		// RhythmDBEntry *
 typedef struct {
 	RBMediaPlayerPrefs *prefs;
 	GHashTable **hash_table;
+	GtkTreeModel *query_model;
+	RhythmDBEntryType *entry_type;
+	const gchar *iter;
 } HashTableInsertionData;
 
 static void
@@ -301,6 +304,10 @@ rb_media_player_prefs_hash_table_insert ( gpointer key,		// gchar * track_uuid
 					  gpointer value,	// RhythmDBEntry *entry
 					  gpointer user_data )	// HashTableInsertionData *
 {
+	g_assert (key != NULL);
+	g_assert (value != NULL);
+	g_assert (user_data != NULL);
+	
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (((HashTableInsertionData *)user_data)->prefs);
 	HashTableInsertionData *data = user_data;
 	GHashTable *hash_table = *(data->hash_table);
@@ -345,7 +352,7 @@ rb_media_player_prefs_tree_view_insert (GtkTreeModel *query_model,
 	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
 	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
 	
-	rb_media_player_prefs_hash_table_insert (entry, NULL, insertion_data);
+	rb_media_player_prefs_hash_table_insert (rb_media_player_source_track_uuid (entry), entry, insertion_data);
 	
 	return FALSE;
 }
@@ -441,27 +448,43 @@ hash_table_duplicate (GHashTable **hash1, GHashTable *hash2)
 	}
 }
 
+static guint
+hash_table_insert_all_idle_cb (HashTableInsertionData *data)
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (data->prefs);
+	
+	RhythmDB *db = priv->db;
+	
+	// Do Query
+	data->query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
+	rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (data->query_model),
+				RHYTHMDB_QUERY_PROP_EQUALS,
+				RHYTHMDB_PROP_TYPE, *(data->entry_type),
+				RHYTHMDB_QUERY_END);
+	
+	gtk_tree_model_foreach (data->query_model,
+				(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
+				data);
+	
+	g_free(data);
+	
+	// Done
+	return FALSE;
+}
+
 static void
 hash_table_insert_all (RBMediaPlayerPrefs *prefs,
 		       GHashTable *hash,
 		       RhythmDBEntryType entry_type)
 {
-	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
-	HashTableInsertionData insertion_data = { prefs, &hash };
-	GtkTreeModel *query_model;
-	RhythmDB *db = priv->db;
+	HashTableInsertionData *data = g_new0(HashTableInsertionData, 1);
+	data->prefs = prefs;
+	data->hash_table = &hash;
+	data->query_model = NULL;
+	data->entry_type = &entry_type;
 	
-	GDK_THREADS_ENTER ();
-	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
-	rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (query_model),
-				RHYTHMDB_QUERY_PROP_EQUALS,
-				RHYTHMDB_PROP_TYPE, entry_type,
-				RHYTHMDB_QUERY_END);
-	GDK_THREADS_LEAVE ();
-	
-	gtk_tree_model_foreach (query_model,
-				(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
-				&insertion_data);
+	g_idle_add ((GSourceFunc)hash_table_insert_all_idle_cb,
+		    data);
 }
 
 static void
@@ -506,37 +529,47 @@ hash_table_insert_some_playlists (RBMediaPlayerPrefs *prefs,
 	g_list_free (items);
 }
 
+static guint
+hash_table_insert_some_podcasts_idle_cb (HashTableInsertionData *data)
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (data->prefs);
+	
+	data->query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(priv->db));
+	rhythmdb_do_full_query (priv->db, RHYTHMDB_QUERY_RESULTS (data->query_model),
+				RHYTHMDB_QUERY_PROP_EQUALS,
+				RHYTHMDB_PROP_TYPE, RHYTHMDB_ENTRY_TYPE_PODCAST_POST,
+				RHYTHMDB_QUERY_PROP_EQUALS,
+				RHYTHMDB_PROP_ALBUM, data->iter,
+				RHYTHMDB_QUERY_END);
+	
+	gtk_tree_model_foreach (data->query_model,
+				(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
+				&data);
+	
+	g_free (data);
+	
+	return FALSE;
+}
+
 static void
 hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 				 GHashTable *hash)
 {
-	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	const gchar **iter;
-	GtkTreeModel *query_model;
-	HashTableInsertionData insertion_data = { prefs, &hash };
 	
 	for (iter = (const gchar **) rb_media_player_prefs_get_string_list (prefs, SYNC_PODCASTS_LIST);
 	     *iter != NULL;
 	     iter++)
 	{
-		// DEBUGGING
-		//g_print ("Found Podcast: %s\n", *iter);
+		HashTableInsertionData *insertion_data = g_new0 (HashTableInsertionData, 1);
+		insertion_data->prefs = prefs;
+		insertion_data->hash_table = &hash;
+		insertion_data->query_model = NULL;
+		insertion_data->entry_type = NULL;
+		insertion_data->iter = *iter;
 		
-		// It is a podcast feed
-		GDK_THREADS_ENTER ();
-		query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(priv->db));
-		rhythmdb_do_full_query (priv->db, RHYTHMDB_QUERY_RESULTS (query_model),
-					RHYTHMDB_QUERY_PROP_EQUALS,
-					RHYTHMDB_PROP_TYPE, RHYTHMDB_ENTRY_TYPE_PODCAST_POST,
-					RHYTHMDB_QUERY_PROP_EQUALS,
-					RHYTHMDB_PROP_ALBUM, *iter,
-					RHYTHMDB_QUERY_END);
-		GDK_THREADS_LEAVE ();
-		
-		// Add the entries to the hash_table
-		gtk_tree_model_foreach (query_model,
-					(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
-					&insertion_data);
+		g_idle_add ((GSourceFunc)hash_table_insert_some_podcasts_idle_cb,
+			    insertion_data);
 	}
 }
 
