@@ -149,6 +149,9 @@ typedef struct
 	uint16_t supported_types[LIBMTP_FILETYPE_UNKNOWN+1];
 	GList *mediatypes;
 	gboolean album_art_supported;
+	
+	GMutex *preview_bar_mutex;
+	GMutex *preview_bar_wait_mutex;
 
 	guint load_songs_idle_id;
 } RBMtpSourcePrivate;
@@ -305,6 +308,12 @@ rb_mtp_source_constructor (GType type, guint n_construct_properties,
 				constructor (type, n_construct_properties, construct_properties));
 
 	priv = MTP_SOURCE_GET_PRIVATE (source);
+	
+	g_assert (priv->preview_bar_mutex == NULL);
+	priv->preview_bar_mutex = g_mutex_new ();
+	
+	g_assert (priv->preview_bar_wait_mutex == NULL);
+	priv->preview_bar_wait_mutex = g_mutex_new ();
 
 	tracks = rb_source_get_entry_view (RB_SOURCE (source));
 	rb_entry_view_append_column (tracks, RB_ENTRY_VIEW_COL_RATING, FALSE);
@@ -492,6 +501,16 @@ rb_mtp_source_dispose (GObject *object)
 	if (priv->load_songs_idle_id != 0) {
 		g_source_remove (priv->load_songs_idle_id);
 		priv->load_songs_idle_id = 0;
+	}
+	
+	if (priv->preview_bar_mutex != NULL) {
+		g_mutex_free (priv->preview_bar_mutex);
+		priv->preview_bar_mutex = NULL;
+	}
+	
+	if (priv->preview_bar_wait_mutex != NULL) {
+		g_mutex_free (priv->preview_bar_wait_mutex);
+		priv->preview_bar_wait_mutex = NULL;
 	}
 
 	G_OBJECT_CLASS (rb_mtp_source_parent_class)->dispose (object);
@@ -1348,6 +1367,8 @@ typedef struct {
 	GtkTreeStore *tree_store;
 	GtkTreeView  *tree_view;
 	GtkProgressBar *preview_bar;
+	GMutex *preview_bar_mutex;
+	GMutex *preview_bar_wait_mutex;
 	RBMediaPlayerSource *source;
 } RBMtpSyncEntriesChangedData;
 
@@ -1437,18 +1458,37 @@ rb_mtp_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 	}
 }
 
-static void
-update_sync_preview_bar (RBMtpSyncEntriesChangedData *data) {
+static void *
+update_sync_preview_bar_thread_func (RBMtpSyncEntriesChangedData *data)
+{
+	// Block the Preview Bar Mutex
+	// If it is already blocked, and another thread is waiting, then bugger off.
+	if (!g_mutex_trylock (data->preview_bar_mutex)) {
+		// If we are already syncing
+		if (!g_mutex_trylock (data->preview_bar_wait_mutex)) {
+			// If we have another one waiting
+			return NULL;
+		} else {
+			// Wait...
+			g_mutex_lock (data->preview_bar_mutex);
+			g_mutex_unlock (data->preview_bar_wait_mutex);
+		}
+	}
+	
 	char *text;
 	char *used;
 	char *capacity;
+	double frac;
 	
 	rb_media_player_prefs_update_sync (data->prefs);
 	
+	frac = (rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED))/(double)impl_get_capacity (data->source);
+	frac = (frac > 1.0 ? 1.0 : frac);
+	frac = (frac < 0.0 ? 0.0 : frac);
 	used = g_format_size_for_display (rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED));
 	capacity = g_format_size_for_display (impl_get_capacity(data->source));
 	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (data->preview_bar), 
-				       (double)(rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED))/(double)impl_get_capacity (data->source));
+				       frac);
 	/* Translators: this is used to display the amount of storage space which will be
 	 * used and the total storage space on an device after it is synced.
 	 */
@@ -1457,6 +1497,19 @@ update_sync_preview_bar (RBMtpSyncEntriesChangedData *data) {
 	g_free (text);
 	g_free (capacity);
 	g_free (used);
+	
+	g_mutex_unlock (data->preview_bar_mutex);
+	return NULL;
+}
+
+static void
+update_sync_preview_bar (RBMtpSyncEntriesChangedData *data) 
+{
+	// Create a thread, so updating the sync bar does not block the UI
+	g_thread_create ((GThreadFunc)update_sync_preview_bar_thread_func,
+			 data,
+			 FALSE,
+			 NULL);
 }
 
 static void
@@ -1605,6 +1658,8 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	entries_changed_data->tree_store = tree_store;
 	label = gtk_builder_get_object (builder, "progressbar-mtp-sync-preview");
 	entries_changed_data->preview_bar = GTK_PROGRESS_BAR (label);
+	entries_changed_data->preview_bar_mutex = priv->preview_bar_mutex;
+	entries_changed_data->preview_bar_wait_mutex = priv->preview_bar_wait_mutex;
 	label = gtk_builder_get_object (builder, "treeview-mtp-sync");
 	entries_changed_data->tree_view = GTK_TREE_VIEW (label);
 	entries_changed_data->source = source;
