@@ -40,6 +40,9 @@ typedef struct {
 	
 	GKeyFile **key_file;
 	
+	GMutex *syncing;
+	GMutex *waiting;
+	
 } RBMediaPlayerSourcePrivate;
 
 /* macro to create rb_media_player_source_get_type and set rb_media_player_source_parent_class */
@@ -139,6 +142,16 @@ rb_media_player_source_dispose (GObject *object)
 		priv->prefs = NULL;
 	}
 	
+	if (priv->syncing != NULL) {
+		g_mutex_free (priv->syncing);
+		priv->syncing = NULL;
+	}
+	
+	if (priv->waiting != NULL) {
+		g_mutex_free (priv->waiting);
+		priv->waiting = NULL;
+	}
+	
 	G_OBJECT_CLASS (rb_media_player_source_parent_class)->dispose (object);
 }
 
@@ -191,6 +204,12 @@ rb_media_player_source_load		(RBMediaPlayerSource *source)
 	
 	priv->prefs = rb_media_player_prefs_new ( priv->key_file,
 						  G_OBJECT (source) );
+	
+	g_assert (priv->syncing == NULL);
+	priv->syncing = g_mutex_new ();
+	
+	g_assert (priv->waiting == NULL);
+	priv->waiting = g_mutex_new ();
 	
 	connect_signal_handlers (G_OBJECT (source));
 }
@@ -416,21 +435,36 @@ impl_sync_playlists (RBMediaPlayerSource *source)
 	*/
 }
 
-
-void
-rb_media_player_source_sync (RBMediaPlayerSource *source)
+static void *
+sync_thread_func (RBMediaPlayerSource *source)
 {
-	 RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	
+	if (!g_mutex_trylock (priv->syncing)) {
+		// If we are already syncing
+		if (!g_mutex_trylock (priv->waiting)) {
+			// If we have another one waiting
+			return NULL;
+		} else {
+			// Wait...
+			g_mutex_lock (priv->syncing);
+			g_mutex_unlock (priv->waiting);
+		}
+	}
+	
+	// Disable the buttons
 	
 	// Check we have enough space, on the iPod.
 	if (rb_media_player_prefs_get_uint64 (priv->prefs, SYNC_SPACE_NEEDED) > rb_media_player_source_get_capacity (source)) {
 		//Not enough Space on Device throw up an error
 		rb_debug("Not enough Free Space on Device.\n");
-		return;
+		g_mutex_unlock (priv->syncing);
+		return NULL;
 	}
 	
-	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED))
+	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED)) {
 		rb_media_player_prefs_update_sync (priv->prefs);
+	}
 	
 	// Remove tracks and podcasts on device, but not in itinerary
 	rb_media_player_source_trash_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
@@ -449,6 +483,23 @@ rb_media_player_source_sync (RBMediaPlayerSource *source)
 	
 	// Set needs Update
 	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
+	
+	// Enable the buttons
+	
+	
+	g_mutex_unlock (priv->syncing);
+	
+	return NULL;
+}
+
+void
+rb_media_player_source_sync (RBMediaPlayerSource *source)
+{	
+	// Make a thread to handle the syncing
+	g_thread_create ((GThreadFunc)sync_thread_func,
+			 source,
+			 FALSE,
+			 NULL);
 }
 
 gchar *

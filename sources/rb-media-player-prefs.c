@@ -28,6 +28,8 @@
  */
 
 //#include <string.h>
+#include <glib.h>
+
 
 #include "rb-media-player-prefs.h"
 #include "rb-media-player-source.h"
@@ -40,6 +42,8 @@
 typedef struct {
 	GKeyFile *key_file;
 	gchar *group;
+	GMutex *updating;
+	GMutex *waiting;
 	
 	/* Pointers to stuff for setting up the sync */
 	RBShell *shell;
@@ -160,6 +164,12 @@ rb_media_player_prefs_dispose (GObject *object)
 		
 	if (priv->db != NULL)
 		g_object_unref (priv->db);
+	
+	if (priv->updating != NULL)
+		g_mutex_free (priv->updating);
+	
+	if (priv->waiting != NULL)
+		g_mutex_free (priv->waiting);
 		
 	priv->source = NULL;
 	
@@ -441,11 +451,14 @@ hash_table_insert_all (RBMediaPlayerPrefs *prefs,
 	GtkTreeModel *query_model;
 	RhythmDB *db = priv->db;
 	
+	GDK_THREADS_ENTER ();
 	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
 	rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (query_model),
 				RHYTHMDB_QUERY_PROP_EQUALS,
 				RHYTHMDB_PROP_TYPE, entry_type,
 				RHYTHMDB_QUERY_END);
+	GDK_THREADS_LEAVE ();
+	
 	gtk_tree_model_foreach (query_model,
 				(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
 				&insertion_data);
@@ -510,6 +523,7 @@ hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 		//g_print ("Found Podcast: %s\n", *iter);
 		
 		// It is a podcast feed
+		GDK_THREADS_ENTER ();
 		query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(priv->db));
 		rhythmdb_do_full_query (priv->db, RHYTHMDB_QUERY_RESULTS (query_model),
 					RHYTHMDB_QUERY_PROP_EQUALS,
@@ -517,6 +531,7 @@ hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 					RHYTHMDB_QUERY_PROP_EQUALS,
 					RHYTHMDB_PROP_ALBUM, *iter,
 					RHYTHMDB_QUERY_END);
+		GDK_THREADS_LEAVE ();
 		
 		// Add the entries to the hash_table
 		gtk_tree_model_foreach (query_model,
@@ -525,8 +540,8 @@ hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 	}
 }
 
-void
-rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
+static gboolean
+rb_media_player_prefs_update_sync_helper ( RBMediaPlayerPrefs *prefs )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
@@ -601,8 +616,34 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 	/* Calculate how much space we need */
 	rb_media_player_prefs_calculate_space_needed (prefs);
 	
+	return TRUE;
+}
+
+void
+rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	
+	if (!g_mutex_trylock (priv->updating)) {
+		// If we are already updating
+		if (!g_mutex_trylock (priv->waiting)) {
+			// If we have another one waiting...
+			g_mutex_lock (priv->updating);
+			g_mutex_unlock (priv->updating);
+			return;
+		} else {
+			// Wait...
+			g_mutex_lock (priv->updating);
+			g_mutex_unlock (priv->waiting);
+		}
+	}
+	
+	rb_media_player_prefs_update_sync_helper (prefs);
+	
 	/* mark as updated */
 	priv->sync_updated = TRUE;
+	
+	g_mutex_unlock (priv->updating);
 }
 
 gboolean
@@ -730,7 +771,13 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 											   NULL) );
 	
 	priv->sync_updated = FALSE;
-
+	
+	g_assert (priv->updating == NULL);
+	priv->updating = g_mutex_new ();
+	
+	g_assert (priv->waiting == NULL);
+	priv->waiting = g_mutex_new ();
+	
      	return prefs;
 }
 
