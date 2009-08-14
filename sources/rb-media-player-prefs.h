@@ -68,7 +68,7 @@ typedef struct
 RBMediaPlayerPrefs *rb_media_player_prefs_new (GKeyFile **key_file, GObject *source );
 GType rb_media_player_prefs_get_type (void);
 
-void	 rb_media_player_prefs_update_sync	( RBMediaPlayerPrefs *prefs );
+gboolean rb_media_player_prefs_update_sync	( RBMediaPlayerPrefs *prefs );
 
 gboolean rb_media_player_prefs_save_file	( RBMediaPlayerPrefs *prefs,
 						  GError **error );

@@ -2045,8 +2045,8 @@ rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 	}
 }
 
-static void *
-update_sync_preview_bar_thread_func (RBiPodSyncEntriesChangedData *data)
+static void
+update_sync_preview_bar_notify_func (RBiPodSyncEntriesChangedData *data)
 {
 	// Block the Preview Bar Mutex
 	// If it is already blocked, and another thread is waiting, then bugger off.
@@ -2054,7 +2054,7 @@ update_sync_preview_bar_thread_func (RBiPodSyncEntriesChangedData *data)
 		// If we are already syncing
 		if (!g_mutex_trylock (data->preview_bar_wait_mutex)) {
 			// If we have another one waiting
-			return NULL;
+			return;
 		} else {
 			// Wait...
 			g_mutex_lock (data->preview_bar_mutex);
@@ -2067,8 +2067,6 @@ update_sync_preview_bar_thread_func (RBiPodSyncEntriesChangedData *data)
 	char *used;
 	char *capacity;
 	double frac;
-	
-	rb_media_player_prefs_update_sync (data->prefs);
 	
 	frac = (rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED))/(double)rb_ipod_helpers_get_capacity (mp);
 	frac = (frac > 1.0 ? 1.0 : frac);
@@ -2089,17 +2087,27 @@ update_sync_preview_bar_thread_func (RBiPodSyncEntriesChangedData *data)
 	// Unblock the preview Bar Mutex
 	g_mutex_unlock (data->preview_bar_mutex);
 	
-	return NULL;
+	return;
+}
+
+static gboolean
+update_sync_preview_bar_idle_cb (RBiPodSyncEntriesChangedData *data)
+{
+	rb_media_player_prefs_update_sync (data->prefs);
+	
+	if (rb_media_player_prefs_get_boolean (data->prefs, SYNC_UPDATED))
+		g_idle_add ((GSourceFunc)update_sync_preview_bar_notify_func,
+			    data);
+	
+	return FALSE;
 }
 
 static void
 update_sync_preview_bar (RBiPodSyncEntriesChangedData *data)
 {
 	// Create a thread, so updating the sync bar does not block the UI
-	g_thread_create ((GThreadFunc)update_sync_preview_bar_thread_func,
-			 data,
-			 FALSE,
-			 NULL);
+	g_idle_add ((GSourceFunc)update_sync_preview_bar_idle_cb,
+		    data);
 }
 
 static void
