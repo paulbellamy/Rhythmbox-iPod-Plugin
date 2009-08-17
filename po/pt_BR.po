@@ -23,8 +23,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: rhythmbox\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2009-08-13 00:14-0400\n"
-"PO-Revision-Date: 2009-08-13 00:14-0400\n"
+"POT-Creation-Date: 2009-08-17 12:30-0400\n"
+"PO-Revision-Date: 2009-08-17 12:31-0400\n"
 "Last-Translator: Og Maciel <ogmaciel@gnome.org>\n"
 "Language-Team: Brazilian Portuguese <gnome-pt_br-list@gnome.org>\n"
 "MIME-Version: 1.0\n"
@@ -837,8 +837,8 @@ msgstr "Não foi possível localizar este álbum no MusicBrainz."
 
 #: ../plugins/audiocd/rb-audiocd-source.c:313
 msgid "You can improve the MusicBrainz database by adding this album."
-msgstr "Você pode melhorar o banco de dados do MusicBrainz adicionando este "
-"álbum."
+msgstr ""
+"Você pode melhorar o banco de dados do MusicBrainz adicionando este álbum."
 
 #: ../plugins/audiocd/rb-audiocd-source.c:440
 msgid "<Invalid unicode>"
@@ -1572,7 +1572,8 @@ msgstr "Inserir um CD virgem"
 
 #: ../plugins/cd-recorder/rb-playlist-source-recorder.c:862
 msgid "Please replace the disc in the drive with a rewritable or blank CD."
-msgstr "Por favor, substitua o disco na unidade por um CD regravável ou virgem."
+msgstr ""
+"Por favor, substitua o disco na unidade por um CD regravável ou virgem."
 
 #: ../plugins/cd-recorder/rb-playlist-source-recorder.c:863
 msgid "Reload a rewritable or blank CD"
@@ -1813,7 +1814,7 @@ msgstr "Desconectar de um compartilhamento DAAP"
 
 #: ../plugins/daap/rb-daap-plugin.c:128
 msgid "Connect to _DAAP share..."
-msgstr "Conectar ao compartilhamento _DAAP..."
+msgstr "Conectar a um compartilhamento _DAAP..."
 
 #: ../plugins/daap/rb-daap-plugin.c:129
 msgid "Connect to a new DAAP share"
@@ -3570,7 +3571,7 @@ msgstr "Os Beatles"
 #.
 #: ../rhythmdb/rhythmdb.c:1704
 msgid "Help!"
-msgstr "Ajuda!"
+msgstr "Help!"
 
 #. Translators: this is an example song title.  If the example
 #. * artist and album names are localised, this should be replaced
