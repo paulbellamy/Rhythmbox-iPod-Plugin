@@ -493,20 +493,6 @@ sync_idle_cb_trash_entries (RBMediaPlayerSource *source)
 }
 
 static guint
-sync_idle_cb_update_sync (RBMediaPlayerSource *source)
-{
-	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
-	
-	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED)) {
-		rb_media_player_prefs_update_sync (priv->prefs);
-	}
-	
-	g_idle_add ((GSourceFunc)sync_idle_cb_trash_entries,
-		    source);
-	return FALSE;
-}
-
-static guint
 sync_idle_cb_check_space (RBMediaPlayerSource *source)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
@@ -519,7 +505,21 @@ sync_idle_cb_check_space (RBMediaPlayerSource *source)
 		return FALSE;
 	}
 	
-	g_idle_add ((GSourceFunc)sync_idle_cb_update_sync,
+	g_idle_add ((GSourceFunc)sync_idle_cb_trash_entries,
+		    source);
+	return FALSE;
+}
+
+static guint
+sync_idle_cb_update_sync (RBMediaPlayerSource *source)
+{
+	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
+	
+	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED)) {
+		rb_media_player_prefs_update_sync (priv->prefs);
+	}
+	
+	g_idle_add ((GSourceFunc)sync_idle_cb_check_space,
 		    source);
 	return FALSE;
 }
@@ -541,7 +541,7 @@ sync_idle_cb_start (RBMediaPlayerSource *source)
 		}
 	}
 	
-	g_idle_add ((GSourceFunc)sync_idle_cb_check_space,
+	g_idle_add ((GSourceFunc)sync_idle_cb_update_sync,
 		    source);
 	return FALSE;
 }
