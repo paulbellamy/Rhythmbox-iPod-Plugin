@@ -330,11 +330,13 @@ rb_media_player_prefs_hash_table_insert ( gpointer key,		// gchar * track_uuid
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (((HashTableInsertionData *)user_data)->prefs);
 	HashTableInsertionData *data = user_data;
 	GHashTable *hash_table = data->hash_table;
-	
+
+	/*
 	if ( g_hash_table_lookup ( hash_table, key ) ) {
 		rb_debug ("Hash table Collision: uuid = %s", (char *)key);
 		return;
 	}
+	*/
 	
 	RhythmDBEntryType entry_type = rhythmdb_entry_get_entry_type(value);
 	if (entry_type == RHYTHMDB_ENTRY_TYPE_SONG && !priv->sync_music)
@@ -633,7 +635,6 @@ rb_media_player_prefs_update_sync_helper ( RBMediaPlayerPrefs *prefs )
 	/* Calculate how much space we need */
 	rb_media_player_prefs_calculate_space_needed (prefs);
 	
-	/*
 	// DEBUGGING
 	GList *iter;
 	g_print ("To Add:\n");
@@ -659,7 +660,7 @@ rb_media_player_prefs_update_sync_helper ( RBMediaPlayerPrefs *prefs )
 	}
 	
 	g_print ("Space Needed: %"G_GUINT64_FORMAT"\n", rb_media_player_prefs_get_uint64 (prefs, SYNC_SPACE_NEEDED));
-	*/
+	
 	return TRUE;
 }
 

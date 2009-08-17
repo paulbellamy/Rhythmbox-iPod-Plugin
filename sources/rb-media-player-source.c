@@ -339,8 +339,8 @@ disconnect_signal_handlers (GObject *source)
 	g_object_get (shell, "db", &db, NULL);
 	
 	g_signal_handlers_disconnect_by_func (db,
-					     G_CALLBACK (auto_sync_cb),
-					     G_OBJECT(source));
+					      G_CALLBACK (auto_sync_cb),
+					      G_OBJECT(source));
 	
 	g_object_unref (G_OBJECT (db));
 	g_object_unref (G_OBJECT (shell));
@@ -381,7 +381,7 @@ rb_media_player_source_show_properties (RBMediaPlayerSource *source)
 static void
 impl_sync_playlists (RBMediaPlayerSource *source)
 {
-	/* FIXME: WTF!? How should this work!!! */
+	/* FIXME: Stub Function.  Not Finished */
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
 	// Make sure the hash tables are created/updated
