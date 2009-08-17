@@ -224,10 +224,11 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	
 	g_object_class_install_property (object_class,
 					 PROP_DEVICE_INFO,
-					 g_param_spec_pointer ("device-info",
-							       "device-info",
-							       "LibMediaPlayerID Device Info",
-							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+					 g_param_spec_object ("device-info",
+							      "device info",
+							      "device information object",
+							      MPID_TYPE_DEVICE,
+							      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
 	g_type_class_add_private (klass, sizeof (RBiPodSourcePrivate));
 }
@@ -242,7 +243,7 @@ rb_ipod_source_set_property (GObject *object,
 
 	switch (prop_id) {
 	case PROP_DEVICE_INFO:
-		priv->device_info = g_value_get_pointer (value);
+		priv->device_info = g_value_dup_object (value);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -260,7 +261,7 @@ rb_ipod_source_get_property (GObject *object,
 
 	switch (prop_id) {
 	case PROP_DEVICE_INFO:
-		g_value_set_pointer (value, priv->device_info);
+		g_value_set_object (value, priv->device_info);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1188,7 +1189,7 @@ impl_move_to_trash (RBSource *source)
 static void
 impl_add_playlist (RBMediaPlayerSource *source,
 		   gchar *name,
-		   GList *entries)	// GList of RhythmDBEntry * on the device to go into the playlist
+		   GList *entries)	/* GList of RhythmDBEntry * on the device to go into the playlist */
 {
 	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
 	Itdb_Playlist *ipod_playlist;
@@ -1221,7 +1222,6 @@ impl_trash_playlist (RBMediaPlayerSource *source,
 		if (!itdb_playlist_is_mpl (playlist) && !playlist->is_spl) {
 			RBSource *rb_playlist = RB_SOURCE (playlist->userdata);
 			
-			// This gripes about something being uninstantiable
 			g_object_get (G_OBJECT (rb_playlist), "name", &name_iter, NULL);
 			
 			if ( g_strcmp0 ( name, name_iter  ) == 0 ) {
@@ -1604,49 +1604,6 @@ get_ipod_filename (const char *mount_point, const char *filename)
 	g_free (result);
 	return tmp;
 }
-/*
-void
-rb_ipod_source_add_entry (RBiPodSource *source, RhythmDBEntry *entry)
-{
-//	rb_removable_media_source_should_paste ((RBRemovableMediaSource *)source,
-//						entry);
-		
-	g_assert (source != NULL);
-	
-	// Skip undownloaded podcasts
-	if (rhythmdb_entry_get_entry_type (entry) == RHYTHMDB_ENTRY_TYPE_PODCAST_POST)
-	if (!rb_podcast_manager_entry_downloaded (entry))
-		return;
-	
-	g_print("Transferring: %20s - %20s - %10s\n",
-		rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
-		rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
-		rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
-	
-	// If it is a playlist, recurse into it adding all elements of it
-	if (rhythmdb_entry_get_entry_type (entry, RHYTHMDB_PROP_ENTRY_TYPE) == RHYTHMDB_ENTRY_TYPE_PLAYLIST) {
-		
-	}
-	
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE(source);
-	const gchar *mount_path = rb_ipod_db_get_mount_path (priv->ipod_db);
-	
-	g_print("mount_path = %s\n",mount_path);
-	
-	const gchar *filename = g_filename_from_uri (rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION),
-						     NULL,
-						     NULL);
-	const gchar *dest = ipod_path_from_unix_path (mount_path, filename);
-	
-	g_print("filename = %s\ndest = %s\n", filename, dest);
-
-	impl_track_added ((RBRemovableMediaSource *) source,
-			  entry,
-			  ipod_path_from_unix_path (mount_path, filename),
-			  rhythmdb_entry_get_uint64 (entry, RHYTHMDB_PROP_FILE_SIZE),
-			  rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_MIMETYPE));
-}
-*/
 
 static void
 impl_add_entries (RBMediaPlayerSource *source, GList *entries)
@@ -1977,7 +1934,6 @@ set_treeview_children (RBiPodSyncEntriesChangedData *data,
 		       gboolean value)
 {
 	GtkTreeIter iter;
-//	GtkCellRendererToggle *toggle;
 	gchar *name;
 	gboolean valid;
 	
@@ -1988,7 +1944,7 @@ set_treeview_children (RBiPodSyncEntriesChangedData *data,
 				    1, &name,
 				    -1);
 		gtk_tree_store_set (data->tree_store, &iter,
-		/* Active */	    0, rb_media_player_prefs_get_entry_value (data->prefs, list, name),
+		/* Active */	    0, rb_media_player_prefs_entry_should_be_synced (data->prefs, list, name),
 		/* Activatable */   2, value,
 				    -1);
 		
@@ -2048,15 +2004,15 @@ rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 static void
 update_sync_preview_bar_notify_func (RBiPodSyncEntriesChangedData *data)
 {
-	// Block the Preview Bar Mutex
-	// If it is already blocked, and another thread is waiting, then bugger off.
+	/* Block the Preview Bar Mutex */
+	/* If it is already blocked, and another thread is waiting, then bugger off. */
 	if (!g_mutex_trylock (data->preview_bar_mutex)) {
-		// If we are already syncing
+		/* If we are already syncing */
 		if (!g_mutex_trylock (data->preview_bar_wait_mutex)) {
-			// If we have another one waiting
+			/* If we have another one waiting */
 			return;
 		} else {
-			// Wait...
+			/* Wait... */
 			g_mutex_lock (data->preview_bar_mutex);
 			g_mutex_unlock (data->preview_bar_wait_mutex);
 		}
@@ -2084,7 +2040,7 @@ update_sync_preview_bar_notify_func (RBiPodSyncEntriesChangedData *data)
 	g_free (capacity);
 	g_free (used);
 	
-	// Unblock the preview Bar Mutex
+	/* Unblock the preview Bar Mutex */
 	g_mutex_unlock (data->preview_bar_mutex);
 	
 	return;
@@ -2105,7 +2061,7 @@ update_sync_preview_bar_idle_cb (RBiPodSyncEntriesChangedData *data)
 static void
 update_sync_preview_bar (RBiPodSyncEntriesChangedData *data)
 {
-	// Create a thread, so updating the sync bar does not block the UI
+	/* Create a thread, so updating the sync bar does not block the UI */
 	g_idle_add ((GSourceFunc)update_sync_preview_bar_idle_cb,
 		    data);
 }
@@ -2115,7 +2071,6 @@ rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 				 gchar	      *path,
 				 RBiPodSyncEntriesChangedData *data)
 {
-	// FIXME: path may not be correct
 	GtkTreeIter   iter;
 	
 	if ( gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, path) == TRUE )
@@ -2132,28 +2087,37 @@ rb_ipod_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 				    -1 );
 		
 		if (g_strcmp0 (name, "Music Playlists") == 0) {
-			rb_media_player_prefs_set_boolean (data->prefs,		// RBMediaPlayerPrefs *
-						   SYNC_MUSIC,		// int
-						   value);		// gboolean
-			// Enable/Disable the children of this node.
+			rb_media_player_prefs_set_boolean (data->prefs,	/* RBMediaPlayerPrefs * */
+						   SYNC_MUSIC,		/* int */
+						   value);		/* gboolean */
+			/* Enable/Disable the children of this node. */
 			set_treeview_children (data, &iter, SYNC_PLAYLISTS_LIST, value);
 		} else if (g_strcmp0 (name, "Podcasts") == 0) {
-			rb_media_player_prefs_set_boolean (data->prefs,		// RBMediaPlayerPrefs *
-						   SYNC_PODCASTS,	// int
-						   value);		// gboolean
-			// Enable/Disable the children of this node.
+			rb_media_player_prefs_set_boolean (data->prefs,	/* RBMediaPlayerPrefs * */
+						   SYNC_PODCASTS,	/* int */
+						   value);		/* gboolean */
+			/* Enable/Disable the children of this node. */
 			set_treeview_children (data, &iter, SYNC_PODCASTS_LIST, value);
 		} else {
-			if (path[0] == '0')
-				rb_media_player_prefs_set_entry (data->prefs,	// RBMediaPlayerPrefs *
-							 SYNC_PLAYLISTS_LIST, //guint
-						 	 name,		// gchar * of the entry changed
-						 	 value);	// gboolean
-			else
-				rb_media_player_prefs_set_entry (data->prefs,	// RBMediaPlayerPrefs *
-							 SYNC_PODCASTS_LIST, //guint
-						 	 name,		// gchar * of the entry changed
-						 	 value);	// gboolean
+			if (path[0] == '0') {
+				if (value)
+					rb_media_player_prefs_set_entry (data->prefs,	/* RBMediaPlayerPrefs * */
+								 SYNC_PLAYLISTS_LIST,	/* guint */
+							 	 name);			/* gchar * of the entry changed */
+				else
+					rb_media_player_prefs_remove_entry (data->prefs,
+									    SYNC_PLAYLISTS_LIST,
+									    name);
+			} else {
+				if (value)
+					rb_media_player_prefs_set_entry (data->prefs,	/* RBMediaPlayerPrefs * */
+								 SYNC_PODCASTS_LIST,	/* guint */
+							 	 name);			/* gchar * of the entry changed */
+				else
+					rb_media_player_prefs_remove_entry (data->prefs,
+									    SYNC_PODCASTS_LIST,
+									    name);
+			}
 		}
 	}
 	
@@ -2240,8 +2204,8 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_free (capacity);
 	g_free (used);
 	
-	// Set tree models for each treeview
-	// tree_store columns are: Active, Name, Activatable
+	/* Set tree models for each treeview */
+	/* tree_store columns are: Active, Name, Activatable */
 	GtkTreeStore *tree_store = gtk_tree_store_new (3, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
 	GtkTreeIter  tree_iter;
 	GtkTreeIter  parent_iter;
@@ -2265,7 +2229,7 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_object_get (RB_SOURCE (source), "shell", &shell, NULL);
 	g_object_get (shell, "db", &library_db, NULL);
 	
-	// Set up the treestore
+	/* Set up the treestore */
 	
 	/* Append the Music Library Parent */
 	gtk_tree_store_append (tree_store,
@@ -2280,12 +2244,12 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
 	while (list_iter) {
 		gtk_tree_store_append (tree_store, &tree_iter, &parent_iter);
-		// set playlists data here
+		/* set playlists data here */
 		g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
 		
-		// set this row's data
+		/* set this row's data */
 		gtk_tree_store_set (tree_store, &tree_iter,
-				    0, rb_media_player_prefs_get_entry_value (prefs, SYNC_PLAYLISTS_LIST, name),
+				    0, rb_media_player_prefs_entry_should_be_synced (prefs, SYNC_PLAYLISTS_LIST, name),
 				    1, name,
 				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC) && !rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL),
 				    -1);
@@ -2314,10 +2278,10 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		RhythmDBEntry *entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), &tree_iter);
 		gtk_tree_store_append (tree_store, &tree_iter2, &parent_iter);
 		
-		// set up this row
+		/* set up this row */
 		name = strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE));
 		gtk_tree_store_set (tree_store, &tree_iter2,
-				    0, rb_media_player_prefs_get_entry_value (prefs, SYNC_PODCASTS_LIST, name),
+				    0, rb_media_player_prefs_entry_should_be_synced (prefs, SYNC_PODCASTS_LIST, name),
 				    1, name,
 				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS) && !rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL),
 				    -1);
@@ -2358,7 +2322,7 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_object_unref (tree_store);
 	
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-auto");
-	// Needs to be on if rb_ipod_helpers_get_autosync
+	/* Needs to be on if rb_ipod_helpers_get_autosync */
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      rb_media_player_prefs_get_boolean (prefs, SYNC_AUTO));
  	g_signal_connect (label, "toggled",
@@ -2366,7 +2330,7 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
  			  entries_changed_data);
 	
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-music-all");
-	// Needs to be on if rb_ipod_helpers_get_autosync
+	/* Needs to be on if rb_ipod_helpers_get_autosync */
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL));
  	g_signal_connect (label, "toggled",
@@ -2374,7 +2338,7 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
  			  entries_changed_data);
 	
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-podcasts-all");
-	// Needs to be on if rb_ipod_helpers_get_autosync
+	/* Needs to be on if rb_ipod_helpers_get_autosync */
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL));
  	g_signal_connect (label, "toggled",

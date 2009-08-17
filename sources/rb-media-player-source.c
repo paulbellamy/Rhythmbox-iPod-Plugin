@@ -384,7 +384,7 @@ impl_sync_playlists (RBMediaPlayerSource *source)
 	/* FIXME: Stub Function.  Not Finished */
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
-	// Make sure the hash tables are created/updated
+	/* Make sure the hash tables are created/updated */
 	if (!rb_media_player_prefs_get_boolean (priv->prefs, SYNC_UPDATED))
 		rb_media_player_prefs_update_sync (priv->prefs);
 	
@@ -440,10 +440,10 @@ sync_idle_cb_cleanup (RBMediaPlayerSource *source)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
-	// Set needs Update
+	/* Set needs Update */
 	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
 	
-	// Unlock the mutex
+	/* Unlock the mutex */
 	g_mutex_unlock (priv->syncing);
 	
 	return FALSE;
@@ -452,7 +452,7 @@ sync_idle_cb_cleanup (RBMediaPlayerSource *source)
 static guint
 sync_idle_cb_playlists (RBMediaPlayerSource *source)
 {
-	// Transfer the playlists
+	/* Transfer the playlists */
 	impl_sync_playlists (source);
 	
 	g_idle_add ((GSourceFunc)sync_idle_cb_cleanup,
@@ -465,10 +465,10 @@ sync_idle_cb_add_entries (RBMediaPlayerSource *source)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
-	// Transfer needed tracks and podcasts from itinerary to device
+	/* Transfer needed tracks and podcasts from itinerary to device */
 	rb_media_player_source_add_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_ADD) );
 	
-	// Done with this list, clear it.
+	/* Done with this list, clear it. */
 	rb_media_player_prefs_set_list (priv->prefs, SYNC_TO_ADD, NULL);
 	
 	g_idle_add ((GSourceFunc)sync_idle_cb_playlists,
@@ -481,10 +481,10 @@ sync_idle_cb_trash_entries (RBMediaPlayerSource *source)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
-	// Remove tracks and podcasts on device, but not in itinerary
+	/* Remove tracks and podcasts on device, but not in itinerary */
 	rb_media_player_source_trash_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
 	
-	// Done with this list, clear it.
+	/* Done with this list, clear it. */
 	rb_media_player_prefs_set_list (priv->prefs, SYNC_TO_REMOVE, NULL);
 	
 	g_idle_add ((GSourceFunc)sync_idle_cb_add_entries,
@@ -497,9 +497,9 @@ sync_idle_cb_check_space (RBMediaPlayerSource *source)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
-	// Check we have enough space, on the iPod.
+	/* Check we have enough space, on the iPod. */
 	if (rb_media_player_prefs_get_uint64 (priv->prefs, SYNC_SPACE_NEEDED) > rb_media_player_source_get_capacity (source)) {
-		//Not enough Space on Device throw up an error
+		/* Not enough Space on Device throw up an error */
 		rb_debug("Not enough Free Space on Device.\n");
 		g_mutex_unlock (priv->syncing);
 		return FALSE;
@@ -530,12 +530,12 @@ sync_idle_cb_start (RBMediaPlayerSource *source)
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
 	if (!g_mutex_trylock (priv->syncing)) {
-		// If we are already syncing
+		/* If we are already syncing */
 		if (!g_mutex_trylock (priv->waiting)) {
-			// If we have another one waiting
+			/* If we have another one waiting */
 			return FALSE;
 		} else {
-			// Wait...
+			/* Wait... */
 			g_mutex_lock (priv->syncing);
 			g_mutex_unlock (priv->waiting);
 		}

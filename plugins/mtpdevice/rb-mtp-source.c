@@ -1389,7 +1389,6 @@ set_treeview_children (RBMtpSyncEntriesChangedData *data,
 		       gboolean value)
 {
 	GtkTreeIter iter;
-//	GtkCellRendererToggle *toggle;
 	gchar *name;
 	gboolean valid;
 	
@@ -1400,7 +1399,7 @@ set_treeview_children (RBMtpSyncEntriesChangedData *data,
 				    1, &name,
 				    -1);
 		gtk_tree_store_set (data->tree_store, &iter,
-				    0, rb_media_player_prefs_get_entry_value (data->prefs, list, name),
+				    0, rb_media_player_prefs_entry_should_be_synced (data->prefs, list, name),
 				    2, value,
 				    -1);
 		
@@ -1461,15 +1460,15 @@ rb_mtp_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
 static void
 update_sync_preview_bar_notify_func (RBMtpSyncEntriesChangedData *data)
 {
-	// Block the Preview Bar Mutex
-	// If it is already blocked, and another thread is waiting, then bugger off.
+	/* Block the Preview Bar Mutex */
+	/* If it is already blocked, and another thread is waiting, then bugger off. */
 	if (!g_mutex_trylock (data->preview_bar_mutex)) {
-		// If we are already syncing
+		/* If we are already syncing */
 		if (!g_mutex_trylock (data->preview_bar_wait_mutex)) {
-			// If we have another one waiting
+			/* If we have another one waiting */
 			return;
 		} else {
-			// Wait...
+			/* Wait... */
 			g_mutex_lock (data->preview_bar_mutex);
 			g_mutex_unlock (data->preview_bar_wait_mutex);
 		}
@@ -1516,7 +1515,7 @@ update_sync_preview_bar_idle_cb (RBMtpSyncEntriesChangedData *data)
 static void
 update_sync_preview_bar (RBMtpSyncEntriesChangedData *data) 
 {
-	// Create a thread, so updating the sync bar does not block the UI
+	/* Create a thread, so updating the sync bar does not block the UI */
 	g_idle_add ((GSourceFunc)update_sync_preview_bar_idle_cb,
 		    data);
 }
@@ -1526,7 +1525,7 @@ rb_mtp_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 				gchar	      *path,
 				RBMtpSyncEntriesChangedData *data)
 {
-	// FIXME: path may not be correct
+	/* FIXME: path may not be correct */
 	GtkTreeIter   iter;
 	
 	if ( gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, path) == TRUE )
@@ -1543,28 +1542,37 @@ rb_mtp_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 				    -1 );
 		
 		if (g_strcmp0 (name, "Music Playlists") == 0) {
-			rb_media_player_prefs_set_boolean (data->prefs,		// RBMediaPlayerPrefs *
-						   SYNC_MUSIC,		// int
-						   value);		// gboolean
-			// Enable/Disable the children of this node.
+			rb_media_player_prefs_set_boolean (data->prefs,	/* RBMediaPlayerPrefs * */
+						   SYNC_MUSIC,		/* int */
+						   value);		/* gboolean */
+			/* Enable/Disable the children of this node. */
 			set_treeview_children (data, &iter, SYNC_PLAYLISTS_LIST, value);
 		} else if (g_strcmp0 (name, "Podcasts") == 0) {
-			rb_media_player_prefs_set_boolean (data->prefs,		// RBMediaPlayerPrefs *
-						   SYNC_PODCASTS,	// int
-						   value);		// gboolean
-			// Enable/Disable the children of this node.
+			rb_media_player_prefs_set_boolean (data->prefs,	/* RBMediaPlayerPrefs * */
+						   SYNC_PODCASTS,	/* int */
+						   value);		/* gboolean */
+			/* Enable/Disable the children of this node. */
 			set_treeview_children (data, &iter, SYNC_PODCASTS_LIST, value);
 		} else {
-			if (path[0] == '0')
-				rb_media_player_prefs_set_entry (data->prefs,	// RBMediaPlayerPrefs *
-							 SYNC_PLAYLISTS_LIST, //guint
-						 	 name,		// gchar * of the entry changed
-						 	 value);	// gboolean
-			else
-				rb_media_player_prefs_set_entry (data->prefs,	// RBMediaPlayerPrefs *
-							 SYNC_PODCASTS_LIST, //guint
-						 	 name,		// gchar * of the entry changed
-						 	 value);	// gboolean
+			if (path[0] == '0') {
+				if (value)
+					rb_media_player_prefs_set_entry (data->prefs,	/* RBMediaPlayerPrefs * */
+								 SYNC_PLAYLISTS_LIST,	/* guint */
+							 	 name);			/* gchar * of the entry changed */
+				else
+					rb_media_player_prefs_remove_entry (data->prefs,
+									    SYNC_PLAYLISTS_LIST,
+									    name);
+			} else {
+				if (value)
+					rb_media_player_prefs_set_entry (data->prefs,	/* RBMediaPlayerPrefs * */
+								 SYNC_PODCASTS_LIST,	/* guint */
+							 	 name);			/* gchar * of the entry changed */
+				else
+					rb_media_player_prefs_remove_entry (data->prefs,
+									    SYNC_PODCASTS_LIST,
+									    name);
+			}
 		}
 	}
 	
@@ -1651,8 +1659,8 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_free (capacity);
 	g_free (used);
 	
-	// Set tree models for each treeview
-	// tree_store columns are: Active, Name, Activatable
+	/* Set tree models for each treeview */
+	/* tree_store columns are: Active, Name, Activatable */
 	GtkTreeStore *tree_store = gtk_tree_store_new (3, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_BOOLEAN);
 	GtkTreeIter  tree_iter;
 	GtkTreeIter  parent_iter;
@@ -1676,9 +1684,9 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_object_get (RB_SOURCE (source), "shell", &shell, NULL);
 	g_object_get (shell, "db", &library_db, NULL);
 	
-	// Set up the treestore
+	/* Set up the treestore */
 	
-	// Append the Music Library Parent
+	/* Append the Music Library Parent */
 	gtk_tree_store_append (tree_store,
 			       &parent_iter,
 			       NULL);
@@ -1691,12 +1699,12 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
 	while (list_iter) {
 		gtk_tree_store_append (tree_store, &tree_iter, &parent_iter);
-		// set playlists data here
+		/* set playlists data here */
 		g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
 		
-		// set this row's data
+		/* set this row's data */
 		gtk_tree_store_set (tree_store, &tree_iter,
-				    0, rb_media_player_prefs_get_entry_value (prefs, SYNC_PLAYLISTS_LIST, name),
+				    0, rb_media_player_prefs_entry_should_be_synced (prefs, SYNC_PLAYLISTS_LIST, name),
 				    1, name,
 				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC) && !rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL),
 				    -1);
@@ -1704,7 +1712,7 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		list_iter = list_iter->next;
 	}
 	
-	// Append the Podcasts Parent
+	/* Append the Podcasts Parent */
 	gtk_tree_store_append (tree_store,
 			       &parent_iter,
 			       NULL);
@@ -1725,10 +1733,10 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		RhythmDBEntry *entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), &tree_iter);
 		gtk_tree_store_append (tree_store, &tree_iter2, &parent_iter);
 		
-		// set up this row
+		/* set up this row */
 		name = strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE));
 		gtk_tree_store_set (tree_store, &tree_iter2,
-				    0, rb_media_player_prefs_get_entry_value (prefs, SYNC_PODCASTS_LIST, name),
+				    0, rb_media_player_prefs_entry_should_be_synced (prefs, SYNC_PODCASTS_LIST, name),
 				    1, name,
 				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS) && !rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL),
 				    -1);
@@ -1737,9 +1745,9 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		valid = gtk_tree_model_iter_next (query_model, &tree_iter);
 	}
 	
-	// Set up the treeview
+	/* Set up the treeview */
 	
-	// First column
+	/* First column */
 	renderer = gtk_cell_renderer_toggle_new();
 	col = gtk_tree_view_column_new_with_attributes (NULL,
 							renderer,
@@ -1752,7 +1760,7 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 			  entries_changed_data);
 	gtk_tree_view_append_column(GTK_TREE_VIEW(label), col);
 	
-	// Second column
+	/* Second column */
 	renderer = gtk_cell_renderer_text_new();
 	col = gtk_tree_view_column_new_with_attributes (NULL,
 							renderer,
@@ -1789,7 +1797,7 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
  			  (GCallback)rb_mtp_sync_podcasts_all_changed_cb,
  			  entries_changed_data);
 	
-	// Set up the Sync Preview Bar
+	/* Set up the Sync Preview Bar */
 	update_sync_preview_bar (entries_changed_data);
 
 	/* FIXME: Not working, yet.

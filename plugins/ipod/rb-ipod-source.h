@@ -72,9 +72,6 @@ void			rb_ipod_source_remove_playlist	(RBiPodSource *ipod_source,
 Itdb_Playlist *		rb_ipod_source_get_playlist	(RBiPodSource *source,
 							 gchar *name);
 
-void			rb_ipod_source_add_entry	(RBiPodSource *source,
-							 RhythmDBEntry *entry);
-
 const gchar *		rb_ipod_source_get_mount_point	(RBiPodSource *source);
 
 G_END_DECLS

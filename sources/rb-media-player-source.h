@@ -88,7 +88,7 @@ void	rb_media_player_source_trash_entries	(RBMediaPlayerSource *source,
 						 GList *entries);
 void	rb_media_player_source_add_playlist	(RBMediaPlayerSource *source,
 						 gchar *name,
-						 GList *entries); // GList of RhythmDBEntry * which are on the device
+						 GList *entries); /* GList of RhythmDBEntry * which are on the device */
 void	rb_media_player_source_trash_playlist	(RBMediaPlayerSource *source,
 						 gchar *name);
 

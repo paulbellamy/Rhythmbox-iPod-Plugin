@@ -27,7 +27,6 @@
  *
  */
 
-//#include <string.h>
 #include <glib.h>
 
 
@@ -46,8 +45,6 @@ typedef struct {
 	GMutex *waiting;
 	
 	/* Pointers to stuff for setting up the sync */
-	RBShell *shell;
-	RhythmDB *db;
 	RBMediaPlayerSource *source;
 	
 	/* lazy-loading style for building sync lists. */
@@ -68,15 +65,13 @@ typedef struct {
 	GHashTable * device_hash;
 	GList *  sync_to_add;
 	GList *  sync_to_remove;
-	guint64	 sync_space_needed; // The space used after syncing
+	guint64	 sync_space_needed; /* The space used after syncing */
 	
 } RBMediaPlayerPrefsPrivate;
 
 enum {
 	PROP_0,
 	
-	PROP_SHELL,
-	PROP_DB,
 	PROP_SOURCE
 };
 
@@ -102,13 +97,16 @@ static void rb_media_player_prefs_hash_table_insert (gpointer key,
 static guint64 rb_media_player_prefs_calculate_space_needed (RBMediaPlayerPrefs *prefs);
 
 static void rb_media_player_prefs_set_property (GObject *object,
-					 guint prop_id,
-					 const GValue *value,
-					 GParamSpec *pspec);
+						guint prop_id,
+						const GValue *value,
+						GParamSpec *pspec);
 static void rb_media_player_prefs_get_property (GObject *object,
-					 guint prop_id,
-					 GValue *value,
-					 GParamSpec *pspec);
+						guint prop_id,
+						GValue *value,
+						GParamSpec *pspec);
+
+static gchar ** rb_media_player_prefs_get_string_list	( RBMediaPlayerPrefs *prefs,
+							  enum SyncPrefKey pref_key );
 
 static void hash_table_duplicate (GHashTable **hash1, GHashTable *hash2);
 static void hash_table_insert_all (RBMediaPlayerPrefs *prefs,
@@ -136,27 +134,27 @@ rb_media_player_prefs_dispose (GObject *object)
 	priv->key_file = NULL;
 	
 	if (priv->group != NULL) {
-		g_free( priv->group );
+		g_free (priv->group);
 		priv->group = NULL;
 	}
 
 	if (priv->sync_playlists_list != NULL) {
-		g_hash_table_destroy ( priv->sync_playlists_list );
+		g_hash_table_destroy (priv->sync_playlists_list);
 		priv->sync_playlists_list = NULL;
 	}
 	
 	if (priv->sync_podcasts_list != NULL) {
-		g_hash_table_destroy ( priv->sync_podcasts_list );
+		g_hash_table_destroy (priv->sync_podcasts_list);
 		priv->sync_podcasts_list = NULL;
 	}
 	
 	if (priv->sync_to_add != NULL) {
-		g_list_free( priv->sync_to_add );
+		g_list_free (priv->sync_to_add);
 		priv->sync_to_add = NULL;
 	}
 	
 	if (priv->sync_to_remove != NULL) {
-		g_list_free( priv->sync_to_remove );
+		g_list_free (priv->sync_to_remove);
 		priv->sync_to_remove = NULL;
 	}
 		
@@ -175,16 +173,6 @@ rb_media_player_prefs_dispose (GObject *object)
 		priv->source = NULL;
 	}
 	
-	if (priv->shell != NULL) {
-		g_object_unref (priv->shell);
-		priv->shell = NULL;
-	}
-	
-	if (priv->db != NULL) {
-		g_object_unref (priv->db);
-		priv->db = NULL;
-	}
-	
 	if (priv->updating != NULL) {
 		g_mutex_free (priv->updating);
 		priv->updating = NULL;
@@ -198,48 +186,23 @@ rb_media_player_prefs_dispose (GObject *object)
 	G_OBJECT_CLASS (rb_media_player_prefs_parent_class)->dispose (object);
 }
 
-static GObject *
-rb_media_player_prefs_constructor (GType type, 
-				    guint n_construct_properties,
-				    GObjectConstructParam *construct_properties)
-{
-	GObject *prefs;
-	
-	prefs = G_OBJECT_CLASS(rb_media_player_prefs_parent_class)
-				->constructor (type, n_construct_properties, construct_properties);
-	
-	return G_OBJECT (prefs);
-}
-
 static void
 rb_media_player_prefs_class_init (RBMediaPlayerPrefsClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-	object_class->constructor = rb_media_player_prefs_constructor;
 	object_class->dispose = rb_media_player_prefs_dispose;
 	
 	object_class->set_property = rb_media_player_prefs_set_property;
 	object_class->get_property = rb_media_player_prefs_get_property;
 	
 	g_object_class_install_property (object_class,
-					 PROP_SHELL,
-					 g_param_spec_pointer ("shell",
-							       "shell",
-							       "Pointer to the RBShell",
-							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-	g_object_class_install_property (object_class,
-					 PROP_DB,
-					 g_param_spec_pointer ("db",
-							       "db",
-							       "Pointer to the RhythmDB",
-							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-	g_object_class_install_property (object_class,
 					 PROP_SOURCE,
-					 g_param_spec_pointer ("source",
-							       "source",
-							       "Pointer to the RBMediaPlayerSource",
-							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+					 g_param_spec_object ("source",
+							      "source",
+							      "Pointer to the RBMediaPlayerSource",
+							      RB_TYPE_MEDIA_PLAYER_SOURCE,
+							      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
 	g_type_class_add_private (klass, sizeof (RBMediaPlayerPrefsPrivate));
 }
@@ -282,33 +245,18 @@ string_list_to_hash_table (const gchar ** string_list)
 
 typedef struct {
 	GHashTable *other_hash_table;
-	GList **list;
+	GList *list;
 } HashTableComparisonData;
 
 static void
-rb_media_player_prefs_hash_table_compare (gpointer key,	// gchar * track_UUID
-				  gpointer value,	// RhythmDBEntry *
-				  gpointer user_data)	// HashTableComparisonData *
+rb_media_player_prefs_hash_table_compare (gpointer key,	/* gchar * track_UUID */
+				  gpointer value,	/* RhythmDBEntry * */
+				  gpointer user_data)	/* HashTableComparisonData * */
 {
 	HashTableComparisonData *data = user_data;
-/*	
-	gpointer orig_key;
 	
-	if ( !g_hash_table_lookup_extended (data->other_hash_table, key, &orig_key, &value) ) {
-		g_print("Not Found: %15s - %15s - %15s\n",
-			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_TITLE),
-			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ARTIST),
-			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
-		*(data->list) = g_list_append ( *(data->list), key );
-	} else {
-		g_print("Found: %15s - %15s - %15s\n",
-			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_TITLE),
-			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ARTIST),
-			rhythmdb_entry_get_string (orig_key, RHYTHMDB_PROP_ALBUM));
-	}
-*/	
 	if ( !g_hash_table_lookup (data->other_hash_table, key) ) {
-		*(data->list) = g_list_append ( *(data->list), value );
+		data->list = g_list_prepend ( data->list, value );
 	}
 
 }
@@ -318,10 +266,12 @@ typedef struct {
 	GHashTable *hash_table;
 } HashTableInsertionData;
 
+
+/* FIXME: This needs a less generic name */
 static void
-rb_media_player_prefs_hash_table_insert ( gpointer key,		// gchar * track_uuid
-					  gpointer value,	// RhythmDBEntry *entry
-					  gpointer user_data )	// HashTableInsertionData *
+rb_media_player_prefs_hash_table_insert ( gpointer key,		/* gchar * track_uuid */
+					  gpointer value,	/* RhythmDBEntry *entry */
+					  gpointer user_data )	/* HashTableInsertionData * */
 {
 	g_assert (key != NULL);
 	g_assert (value != NULL);
@@ -350,8 +300,6 @@ rb_media_player_prefs_hash_table_insert ( gpointer key,		// gchar * track_uuid
 			return;
 	}
 		
-	//g_print("entry_type->name: %s\n", entry_type->name); // DEBUGGING
-		
 	g_hash_table_insert ( hash_table,
 			      key,
 			      value );
@@ -366,12 +314,6 @@ rb_media_player_prefs_tree_view_insert (GtkTreeModel *query_model,
 	RhythmDBEntry *entry;
 	
 	entry = rhythmdb_query_model_iter_to_entry (RHYTHMDB_QUERY_MODEL (query_model), iter);
-	
-	// DEBUGGING
-	//g_print ("Inserting: %15s - %15s - %15s\n",
-	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE),
-	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ARTIST),
-	//	 rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_ALBUM));
 	
 	rb_media_player_prefs_hash_table_insert (rb_media_player_source_track_uuid (entry), entry, data);
 	
@@ -396,29 +338,20 @@ rb_media_player_prefs_calculate_space_needed (RBMediaPlayerPrefs *prefs)
 								       RHYTHMDB_PROP_FILE_SIZE );
 	}
 	
-	// DEBUGGING
-	//g_print("Space Needed: %s\n", g_format_size_for_display (priv->sync_space_needed));
-	
 	return priv->sync_space_needed;
 }
 
 static void
 rb_media_player_prefs_set_property (GObject *object,
-			     guint prop_id,
-			     const GValue *value,
-			     GParamSpec *pspec)
+				    guint prop_id,
+				    const GValue *value,
+				    GParamSpec *pspec)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (object);
 
 	switch (prop_id) {
-	case PROP_SHELL:
-		priv->shell = g_value_get_pointer (value);
-		break;
-	case PROP_DB:
-		priv->db = g_value_get_pointer (value);
-		break;
 	case PROP_SOURCE:
-		priv->source = g_value_get_pointer (value);
+		priv->source = g_value_dup_object (value);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -428,21 +361,15 @@ rb_media_player_prefs_set_property (GObject *object,
 
 static void
 rb_media_player_prefs_get_property (GObject *object,
-			     guint prop_id,
-			     GValue *value,
-			     GParamSpec *pspec)
+				    guint prop_id,
+				    GValue *value,
+				    GParamSpec *pspec)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (object);
 
 	switch (prop_id) {
-	case PROP_SHELL:
-		g_value_set_pointer (value, priv->shell);
-		break;
-	case PROP_DB:
-		g_value_set_pointer (value, priv->db);
-		break;
 	case PROP_SOURCE:
-		g_value_set_pointer (value, priv->source);
+		g_value_set_object (value, priv->source);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -450,7 +377,9 @@ rb_media_player_prefs_get_property (GObject *object,
 	}
 }
 
-/* Duplicates hash2 into hash1 */
+/* Duplicate all entries from hash2 to hash1. hash1
+ * needs to not be empty, duplicate entries are silently dropped
+ */
 static void
 hash_table_duplicate (GHashTable **hash1, GHashTable *hash2)
 {
@@ -458,13 +387,7 @@ hash_table_duplicate (GHashTable **hash1, GHashTable *hash2)
 	gpointer key, value;
 	
 	g_hash_table_iter_init (&iter, hash2);
-	while (g_hash_table_iter_next (&iter, &key, &value)) {
-		// DEBUGGING
-		//g_print ("Duplicating: %15s - %15s - %15s\n",
-		//	 rhythmdb_entry_get_string (key, RHYTHMDB_PROP_TITLE),
-		//	 rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ARTIST),
-		//	 rhythmdb_entry_get_string (key, RHYTHMDB_PROP_ALBUM));
-		
+	while (g_hash_table_iter_next (&iter, &key, &value)) {		
 		g_hash_table_insert(*hash1, key, value);
 	}
 }
@@ -477,9 +400,13 @@ hash_table_insert_all (RBMediaPlayerPrefs *prefs,
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	GtkTreeModel *query_model;
 	HashTableInsertionData data = { prefs, hash };
+	RBShell *shell;
+	RhythmDB *db;
+	g_object_get (priv->source, "shell", &shell, NULL);
+	g_object_get (shell, "db", &db, NULL);
 	
-	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(priv->db));
-	rhythmdb_do_full_query (priv->db, RHYTHMDB_QUERY_RESULTS (query_model),
+	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
+	rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (query_model),
 				RHYTHMDB_QUERY_PROP_EQUALS,
 				RHYTHMDB_PROP_TYPE, entry_type,
 				RHYTHMDB_QUERY_END);
@@ -487,6 +414,9 @@ hash_table_insert_all (RBMediaPlayerPrefs *prefs,
 	gtk_tree_model_foreach (query_model,
 				(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
 				&data);
+	
+	g_object_unref (db);
+	g_object_unref (shell);
 }
 
 static void
@@ -494,40 +424,38 @@ hash_table_insert_some_playlists (RBMediaPlayerPrefs *prefs,
 				  GHashTable *hash)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
-	const gchar **iter;
-	gchar *name;
 	GList *list_iter, *items;
 	GtkTreeModel *query_model;
 	HashTableInsertionData data = { prefs, hash };
-
-
-	items = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (priv->shell) );	
-	for ( iter = (const gchar **) rb_media_player_prefs_get_string_list ( prefs, SYNC_PLAYLISTS_LIST );
-	      *iter != NULL;
-	      iter++ )
+	RBShell *shell;
+	
+	g_object_get (priv->source, "shell", &shell, NULL);
+	items = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
+	g_object_unref (shell);
+	
+	/* For each playlist in Rhythmbox */
+	for (list_iter = items;
+	     list_iter;
+	     list_iter = list_iter->next )
 	{
-		// get item with ( g_strcmp0(name, iter) == 0 )
-		for (list_iter = items;
-		     list_iter;
-		     list_iter = list_iter->next )
-		{
-			// This gripes about something being uninstantiable
-			g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
+		gchar *name;
+		
+		g_object_get (G_OBJECT (list_iter->data), "name", &name, NULL);
+		
+		/* See if we should sync it */
+		if ( g_hash_table_lookup (priv->sync_playlists_list, name) ) {
+			query_model = GTK_TREE_MODEL (rb_playlist_source_get_query_model (list_iter->data));
 			
-			if ( g_strcmp0 ( name, *iter ) == 0 ) {
-				// DEBUGGING
-				//g_print("Found Playlist: %s\n", name);
-				
-				query_model = GTK_TREE_MODEL (rb_playlist_source_get_query_model (list_iter->data));
-				
-				// Add the entries to the hash_table
-				gtk_tree_model_foreach (query_model,
-							(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
-							&data);
-				break;
-			}
+			/* Add the entries to the hash_table */
+			gtk_tree_model_foreach (query_model,
+						(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
+						&data);
+			break;
 		}
+		
+		g_free (name);
 	}
+	
 	g_list_free (items);
 }
 
@@ -539,14 +467,18 @@ hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 	const gchar **iter;
 	GtkTreeModel *query_model;
 	HashTableInsertionData data = { prefs, hash };
+	RBShell *shell;
+	RhythmDB *db;
+	g_object_get (priv->source, "shell", &shell, NULL);
+	g_object_get (shell, "db", &db, NULL);
 	
 	for (iter = (const gchar **) rb_media_player_prefs_get_string_list (prefs, SYNC_PODCASTS_LIST);
 	     *iter != NULL;
 	     iter++)
 	{
 
-		query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(priv->db));
-		rhythmdb_do_full_query (priv->db, RHYTHMDB_QUERY_RESULTS (query_model),
+		query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(db));
+		rhythmdb_do_full_query (db, RHYTHMDB_QUERY_RESULTS (query_model),
 					RHYTHMDB_QUERY_PROP_EQUALS,
 					RHYTHMDB_PROP_TYPE, RHYTHMDB_ENTRY_TYPE_PODCAST_POST,
 					RHYTHMDB_QUERY_PROP_EQUALS,
@@ -557,12 +489,16 @@ hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 					(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
 					&data);
 	}
+	
+	g_object_unref (db);
+	g_object_unref (shell);
 }
 
 static gboolean
 rb_media_player_prefs_update_sync_helper ( RBMediaPlayerPrefs *prefs )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	HashTableComparisonData comparison_data;
 	
 	if (priv->itinerary_hash != NULL) {
 		g_hash_table_unref (priv->itinerary_hash);
@@ -576,19 +512,17 @@ rb_media_player_prefs_update_sync_helper ( RBMediaPlayerPrefs *prefs )
 	
 	priv->itinerary_hash = g_hash_table_new (g_str_hash, g_str_equal);
 	priv->device_hash = g_hash_table_new (g_str_hash, g_str_equal);
-	GList	*to_add = NULL; // Files to go onto the device
-	GList	*to_remove = NULL; // Files to be removed from the device
-	HashTableComparisonData comparison_data;
+	
 	
 	/* Build itinerary_hash */
 	if (priv->sync_music) {
 		if (priv->sync_music_all) {
-			// Syncing all songs
+			/* Syncing all songs */
 			hash_table_insert_all (prefs,
 					       priv->itinerary_hash,
 					       RHYTHMDB_ENTRY_TYPE_SONG);
 		} else {
-			// Only syncing some songs
+			/* Only syncing some songs */
 			hash_table_insert_some_playlists (prefs,
 							  priv->itinerary_hash);
 		}
@@ -596,12 +530,12 @@ rb_media_player_prefs_update_sync_helper ( RBMediaPlayerPrefs *prefs )
 	
 	if (priv->sync_podcasts) {
 		if (priv->sync_podcasts_all) {
-			// Syncing all podcasts
+			/* Syncing all podcasts */
 			hash_table_insert_all (prefs,
 					       priv->itinerary_hash,
 					       RHYTHMDB_ENTRY_TYPE_PODCAST_POST);
 		} else {
-			// Only syncing some podcasts
+			/* Only syncing some podcasts */
 			hash_table_insert_some_podcasts (prefs,
 							 priv->itinerary_hash);
 		}
@@ -618,48 +552,22 @@ rb_media_player_prefs_update_sync_helper ( RBMediaPlayerPrefs *prefs )
 	
 	/* Build Addition List */
 	comparison_data.other_hash_table = priv->device_hash;
-	comparison_data.list = &to_add;
+	comparison_data.list = NULL;
 	g_hash_table_foreach (priv->itinerary_hash,
-			      rb_media_player_prefs_hash_table_compare, // function to add to add list if necessary
+			      rb_media_player_prefs_hash_table_compare, /* function to add to add list if necessary */
 			      &comparison_data );
-	rb_media_player_prefs_set_list(prefs, SYNC_TO_ADD, to_add);
+	rb_media_player_prefs_set_list(prefs, SYNC_TO_ADD, comparison_data.list);
 	
 	/* Build Removal List */
 	comparison_data.other_hash_table = priv->itinerary_hash;
-	comparison_data.list = &to_remove;
+	comparison_data.list = NULL;
 	g_hash_table_foreach (priv->device_hash,
-			      rb_media_player_prefs_hash_table_compare, // function to add to remove list if necessary
+			      rb_media_player_prefs_hash_table_compare, /* function to add to remove list if necessary */
 			      &comparison_data );
-	rb_media_player_prefs_set_list(prefs, SYNC_TO_REMOVE, to_remove);
+	rb_media_player_prefs_set_list(prefs, SYNC_TO_REMOVE, comparison_data.list);
 	
 	/* Calculate how much space we need */
 	rb_media_player_prefs_calculate_space_needed (prefs);
-	
-	// DEBUGGING
-	GList *iter;
-	g_print ("To Add:\n");
-	for (iter = to_add;
-	     iter != NULL;
-	     iter = iter->next)
-	{
-		g_print ("%s - %s - %s\n",
-			 rhythmdb_entry_get_string(iter->data, RHYTHMDB_PROP_TITLE),
-			 rhythmdb_entry_get_string(iter->data, RHYTHMDB_PROP_ARTIST),
-			 rhythmdb_entry_get_string(iter->data, RHYTHMDB_PROP_ALBUM));
-	}
-	
-	g_print ("To Remove:\n");
-	for (iter = to_remove;
-	     iter != NULL;
-	     iter = iter->next)
-	{
-		g_print ("%s - %s - %s\n",
-			 rhythmdb_entry_get_string(iter->data, RHYTHMDB_PROP_TITLE),
-			 rhythmdb_entry_get_string(iter->data, RHYTHMDB_PROP_ARTIST),
-			 rhythmdb_entry_get_string(iter->data, RHYTHMDB_PROP_ALBUM));
-	}
-	
-	g_print ("Space Needed: %"G_GUINT64_FORMAT"\n", rb_media_player_prefs_get_uint64 (prefs, SYNC_SPACE_NEEDED));
 	
 	return TRUE;
 }
@@ -670,14 +578,14 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
 	if (!g_mutex_trylock (priv->updating)) {
-		// If we are already updating
+		/* If we are already updating */
 		if (!g_mutex_trylock (priv->waiting)) {
-			// If we have another one waiting...
+			/* If we have another one waiting... */
 			g_mutex_lock (priv->updating);
 			g_mutex_unlock (priv->updating);
 			return FALSE;
 		} else {
-			// Wait...
+			/* Wait... */
 			g_mutex_lock (priv->updating);
 			g_mutex_unlock (priv->waiting);
 		}
@@ -690,7 +598,7 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 	
 	g_mutex_unlock (priv->updating);
 	
-	// So it can be used as in g_idle_add
+	/* So it can be used as in g_idle_add */
 	return FALSE;
 }
 
@@ -755,16 +663,9 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 	g_return_val_if_fail (source != NULL, NULL);
 	
 	RBMediaPlayerPrefs *prefs;
-	RBShell *shell;
-	RhythmDB *db;
-	RBMediaPlayerSource *mp_source = RB_MEDIA_PLAYER_SOURCE (source);
-	g_object_get (mp_source, "shell", &shell, NULL);
-	g_object_get (shell, "db", &db, NULL);
 	
 	prefs = RB_MEDIA_PLAYER_PREFS (g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS,
-						     "source", g_object_ref (mp_source),
-						     "shell", shell,
-						     "db", db,
+						     "source", RB_MEDIA_PLAYER_SOURCE (source),
 						     NULL));
 	
 	g_return_val_if_fail (prefs != NULL, NULL);
@@ -773,7 +674,7 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 	
 	GError *error = NULL;
 	
-	// Load the key_file if it isn't already
+	/* Load the key_file if it isn't already */
 	if (*key_file == NULL)
 		*key_file = rb_media_player_prefs_load_file(prefs, &error);
 	
@@ -787,11 +688,11 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 	
 	priv->group = rb_media_player_source_get_serial ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
 	if (priv->group == NULL) {
-		// Couldn't get the serial, use the ipod name
+		/* Couldn't get the serial, use the device name */
 		priv->group = rb_media_player_source_get_name ( RB_MEDIA_PLAYER_SOURCE (priv->source) );
 	}
 	
-	// add the group and keys, unless it exists
+	/* add the group and keys, unless it exists */
 	if ( !g_key_file_has_group(priv->key_file, priv->group) ) {
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", FALSE);
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", FALSE);
@@ -802,7 +703,7 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 		g_key_file_set_string_list (priv->key_file, priv->group, "sync_podcasts_list", (const gchar * const *) "", 0);
 	}
 	
-	// Load initial values from the file
+	/* Load initial values from the file */
 	priv->sync_auto = g_key_file_get_boolean (priv->key_file, priv->group, "sync_auto", NULL);
 	priv->sync_music = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music", NULL);
 	priv->sync_music_all = g_key_file_get_boolean (priv->key_file, priv->group, "sync_music_all", NULL);
@@ -846,13 +747,13 @@ rb_media_player_prefs_get_boolean ( RBMediaPlayerPrefs *prefs,
 	}
 }
 
-gchar **
+static gchar **
 rb_media_player_prefs_get_string_list ( RBMediaPlayerPrefs *prefs,
-				guint prop_id)
+					enum SyncPrefKey pref_key)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_PLAYLISTS_LIST:
 			return hash_table_to_string_list (priv->sync_playlists_list);
 		case SYNC_PODCASTS_LIST:
@@ -865,11 +766,11 @@ rb_media_player_prefs_get_string_list ( RBMediaPlayerPrefs *prefs,
 
 GHashTable *
 rb_media_player_prefs_get_hash_table (RBMediaPlayerPrefs *prefs,
-				      guint prop_id)
+				      enum SyncPrefKey pref_key)
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_PLAYLISTS_LIST:
 			return priv->sync_playlists_list;
 		case SYNC_PODCASTS_LIST:
@@ -882,12 +783,12 @@ rb_media_player_prefs_get_hash_table (RBMediaPlayerPrefs *prefs,
 
 void
 rb_media_player_prefs_set_boolean ( RBMediaPlayerPrefs *prefs,
-			    guint pref_id,
-			    gboolean value )
+				    enum SyncPrefKey pref_key,
+				    gboolean value )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (pref_id) {
+	switch (pref_key) {
 		case SYNC_AUTO:		priv->sync_auto = value;
 					g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", value);
 					break;
@@ -903,7 +804,7 @@ rb_media_player_prefs_set_boolean ( RBMediaPlayerPrefs *prefs,
 		case SYNC_PODCASTS_ALL:	priv->sync_podcasts_all = value;
 					g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", value);
 					break;
-		case SYNC_UPDATED:	priv->sync_updated = value;
+		case SYNC_UPDATED:	priv->sync_updated = value; /* Not stored in key file */
 					return;
 		default:		break;
 	}
@@ -913,12 +814,12 @@ rb_media_player_prefs_set_boolean ( RBMediaPlayerPrefs *prefs,
 
 void
 rb_media_player_prefs_set_list ( RBMediaPlayerPrefs *prefs,
-			 guint prop_id,
-			 GList * list )
+				 enum SyncPrefKey pref_key,
+				 GList * list )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_TO_ADD:
 			g_list_free(priv->sync_to_add);
 			priv->sync_to_add = list;
@@ -936,11 +837,11 @@ rb_media_player_prefs_set_list ( RBMediaPlayerPrefs *prefs,
 
 GList *
 rb_media_player_prefs_get_list ( RBMediaPlayerPrefs *prefs,
-			 guint prop_id )
+				 enum SyncPrefKey pref_key )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_TO_ADD:
 			return priv->sync_to_add;
 		case SYNC_TO_REMOVE:
@@ -953,12 +854,12 @@ rb_media_player_prefs_get_list ( RBMediaPlayerPrefs *prefs,
 
 gchar *
 rb_media_player_prefs_get_entry	( RBMediaPlayerPrefs *prefs,
-			  guint prop_id,
-			  const gchar * entry )
+				  enum SyncPrefKey pref_key,
+				  const gchar * entry )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_PLAYLISTS_LIST:
 			return g_hash_table_lookup (priv->sync_playlists_list, entry);
 		case SYNC_PODCASTS_LIST:
@@ -971,24 +872,28 @@ rb_media_player_prefs_get_entry	( RBMediaPlayerPrefs *prefs,
 
 /* returns whether or not an entry should be synced */
 gboolean
-rb_media_player_prefs_get_entry_value ( RBMediaPlayerPrefs *prefs,
-			  guint prop_id,
-			  const gchar * entry )
+rb_media_player_prefs_entry_should_be_synced ( RBMediaPlayerPrefs *prefs,
+					       enum SyncPrefKey pref_key,
+					       const gchar * entry )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	gboolean value = (gboolean) rb_media_player_prefs_get_entry (prefs, prop_id, entry);
+	gboolean found = (rb_media_player_prefs_get_entry (prefs, pref_key, entry) != NULL);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_PLAYLISTS_LIST:
-			value = value && priv->sync_music;
-			value = value || priv->sync_music_all;
-			return value;
+			if (priv->sync_music_all) {
+				return TRUE;
+			}
+			
+			return found && priv->sync_music;
 		
 		case SYNC_PODCASTS_LIST:
-			value = value && priv->sync_podcasts;
-			value = value || priv->sync_podcasts_all;
-			return value;
+			if (priv->sync_podcasts_all) {
+				return TRUE;
+			}
+			
+			return found && priv->sync_podcasts;
 		
 		default:
 			g_assert_not_reached();
@@ -998,42 +903,56 @@ rb_media_player_prefs_get_entry_value ( RBMediaPlayerPrefs *prefs,
 
 void
 rb_media_player_prefs_set_entry ( RBMediaPlayerPrefs *prefs,
-			  guint prop_id,
-			  const gchar * entry,
-			  gboolean value )
+				  enum SyncPrefKey pref_key,
+				  const gchar * entry )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	GHashTable *hash_table;
-	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_PLAYLISTS_LIST:
-			hash_table = priv->sync_playlists_list;
-			break;
-		case SYNC_PODCASTS_LIST:
-			hash_table = priv->sync_podcasts_list;
-			break;
-		default:
-			g_assert_not_reached();
-			return;
-	}
-	
-	if (value) {
-		if (!rb_media_player_prefs_get_entry (prefs, prop_id, entry))
-			g_hash_table_insert (hash_table, g_strdup (entry), g_strdup (entry));
-	} else {
-		g_hash_table_remove (hash_table, entry);
-	}
-	
-	switch (prop_id) {
-		case SYNC_PLAYLISTS_LIST:
+			if (!rb_media_player_prefs_get_entry (prefs, pref_key, entry))
+				g_hash_table_insert (priv->sync_playlists_list, g_strdup(entry), g_strdup (entry));
+			
 			g_key_file_set_string_list (priv->key_file, priv->group,
 						    "sync_playlists_list",
 						    (const gchar * const *) rb_media_player_prefs_get_string_list (prefs, SYNC_PLAYLISTS_LIST),
 						    g_hash_table_size (priv->sync_playlists_list) );
 			
 			break;
-		case SYNC_PODCASTS_LIST:	
+		case SYNC_PODCASTS_LIST:
+			if (!rb_media_player_prefs_get_entry (prefs, pref_key, entry))
+				g_hash_table_insert (priv->sync_podcasts_list, g_strdup(entry), g_strdup (entry));
+				
+			g_key_file_set_string_list (priv->key_file, priv->group,
+						    "sync_podcasts_list",
+						    (const gchar * const *) rb_media_player_prefs_get_string_list (prefs, SYNC_PODCASTS_LIST),
+						    g_hash_table_size (priv->sync_podcasts_list) );
+			break;
+		default:
+			g_assert_not_reached();
+			return;
+	}
+	
+	rb_media_player_prefs_save_file (prefs, NULL);
+}
+
+void
+rb_media_player_prefs_remove_entry ( RBMediaPlayerPrefs *prefs,
+				     enum SyncPrefKey pref_key,
+				     const gchar *entry )
+{
+	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
+	
+	switch (pref_key) {
+		case SYNC_PLAYLISTS_LIST:
+			g_hash_table_remove (priv->sync_playlists_list, entry);
+			g_key_file_set_string_list (priv->key_file, priv->group,
+						    "sync_playlists_list",
+						    (const gchar * const *) rb_media_player_prefs_get_string_list (prefs, SYNC_PLAYLISTS_LIST),
+						    g_hash_table_size (priv->sync_playlists_list) );
+			break;
+		case SYNC_PODCASTS_LIST:
+			g_hash_table_remove (priv->sync_podcasts_list, entry);
 			g_key_file_set_string_list (priv->key_file, priv->group,
 						    "sync_podcasts_list",
 						    (const gchar * const *) rb_media_player_prefs_get_string_list (prefs, SYNC_PODCASTS_LIST),
@@ -1049,11 +968,11 @@ rb_media_player_prefs_set_entry ( RBMediaPlayerPrefs *prefs,
 				  
 guint64
 rb_media_player_prefs_get_uint64 ( RBMediaPlayerPrefs *prefs,
-			   guint prop_id )
+				   enum SyncPrefKey pref_key )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_SPACE_NEEDED:
 			return priv->sync_space_needed;
 		default:
@@ -1064,12 +983,12 @@ rb_media_player_prefs_get_uint64 ( RBMediaPlayerPrefs *prefs,
 
 void
 rb_media_player_prefs_set_uint64 ( RBMediaPlayerPrefs *prefs,
-			   guint prop_id,
-			   gint value )
+				   enum SyncPrefKey pref_key,
+				   guint64 value )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	
-	switch (prop_id) {
+	switch (pref_key) {
 		case SYNC_SPACE_NEEDED:
 			priv->sync_space_needed = value;
 			break;

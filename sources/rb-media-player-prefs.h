@@ -30,7 +30,6 @@
 #define __RB_MEDIA_PLAYER_PREFS_H
 
 #include <gio/gio.h>
-//#include <gdk-pixbuf/gdk-pixbuf.h>
 
 G_BEGIN_DECLS
 
@@ -41,7 +40,7 @@ G_BEGIN_DECLS
 #define RB_IS_MEDIA_PLAYER_PREFS_CLASS(k)  (G_TYPE_CHECK_CLASS_TYPE ((k), RB_TYPE_MEDIA_PLAYER_PREFS))
 #define RB_MEDIA_PLAYER_PREFS_GET_CLASS(o) (G_TYPE_INSTANCE_GET_CLASS ((o), RB_TYPE_MEDIA_PLAYER_PREFS, RBMediaPlayerPrefsClass))
 
-enum {
+enum SyncPrefKey {
 	SYNC_AUTO,
 	SYNC_MUSIC,
 	SYNC_MUSIC_ALL,
@@ -73,33 +72,33 @@ gboolean rb_media_player_prefs_update_sync	( RBMediaPlayerPrefs *prefs );
 gboolean rb_media_player_prefs_save_file	( RBMediaPlayerPrefs *prefs,
 						  GError **error );
 gboolean rb_media_player_prefs_get_boolean	( RBMediaPlayerPrefs *prefs,
-						  guint pref_id );
+						  enum SyncPrefKey pref_key );
 void	 rb_media_player_prefs_set_boolean	( RBMediaPlayerPrefs *prefs,
-						  guint pref_id,
+						  enum SyncPrefKey pref_key,
 						  gboolean value );
-gchar ** rb_media_player_prefs_get_string_list	( RBMediaPlayerPrefs *prefs,
-						  guint prop_id );
 GHashTable * rb_media_player_prefs_get_hash_table (RBMediaPlayerPrefs *prefs,
-						   guint prop_id);
+						   enum SyncPrefKey pref_key );
 void	 rb_media_player_prefs_set_list		( RBMediaPlayerPrefs *prefs,
-						  guint prop_id,
+						  enum SyncPrefKey pref_key,
 						  GList * list );
 GList *  rb_media_player_prefs_get_list		( RBMediaPlayerPrefs *prefs,
-						  guint prop_id );
+						  enum SyncPrefKey pref_key );
 gchar *	 rb_media_player_prefs_get_entry	( RBMediaPlayerPrefs *prefs,
-						  guint prop_id,
+						  enum SyncPrefKey pref_key,
 						  const gchar * entry );
 void	 rb_media_player_prefs_set_entry	( RBMediaPlayerPrefs *prefs,
-						  guint prop_id,
-						  const gchar * entry,
-						  gboolean value );
-gboolean rb_media_player_prefs_get_entry_value ( RBMediaPlayerPrefs *prefs,
-						 guint prop_id,
-						 const gchar * entry );
+						  enum SyncPrefKey pref_key,
+						  const gchar * entry );
+void	 rb_media_player_prefs_remove_entry	( RBMediaPlayerPrefs *prefs,
+						  enum SyncPrefKey pref_key,
+						  const gchar *entry );
+gboolean rb_media_player_prefs_entry_should_be_synced ( RBMediaPlayerPrefs *prefs,
+							enum SyncPrefKey pref_key,
+							const gchar * entry );
 guint64	 rb_media_player_prefs_get_uint64	( RBMediaPlayerPrefs *prefs,
-						  guint prop_id );
+						  enum SyncPrefKey pref_key );
 void	 rb_media_player_prefs_set_uint64	( RBMediaPlayerPrefs *prefs,
-						  guint prop_id,
-						  gint value );
+						  enum SyncPrefKey pref_key,
+						  guint64 value );
 
 #endif
