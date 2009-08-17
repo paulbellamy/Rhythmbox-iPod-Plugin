@@ -474,9 +474,7 @@ hash_table_insert_all (RBMediaPlayerPrefs *prefs,
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	GtkTreeModel *query_model;
-	HashTableInsertionData *data = g_new0(HashTableInsertionData, 1);
-	data->prefs = prefs;
-	data->hash_table = hash;
+	HashTableInsertionData data = { prefs, hash };
 	
 	query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(priv->db));
 	rhythmdb_do_full_query (priv->db, RHYTHMDB_QUERY_RESULTS (query_model),
@@ -486,9 +484,7 @@ hash_table_insert_all (RBMediaPlayerPrefs *prefs,
 	
 	gtk_tree_model_foreach (query_model,
 				(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
-				data);
-	
-	g_free(data);
+				&data);
 }
 
 static void
@@ -500,7 +496,7 @@ hash_table_insert_some_playlists (RBMediaPlayerPrefs *prefs,
 	gchar *name;
 	GList *list_iter, *items;
 	GtkTreeModel *query_model;
-	HashTableInsertionData insertion_data = { prefs, hash };
+	HashTableInsertionData data = { prefs, hash };
 
 
 	items = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (priv->shell) );	
@@ -525,7 +521,7 @@ hash_table_insert_some_playlists (RBMediaPlayerPrefs *prefs,
 				// Add the entries to the hash_table
 				gtk_tree_model_foreach (query_model,
 							(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
-							&insertion_data);
+							&data);
 				break;
 			}
 		}
@@ -540,9 +536,7 @@ hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
 	const gchar **iter;
 	GtkTreeModel *query_model;
-	HashTableInsertionData *data = g_new0 (HashTableInsertionData, 1);
-	data->prefs = prefs;
-	data->hash_table = hash;
+	HashTableInsertionData data = { prefs, hash };
 	
 	for (iter = (const gchar **) rb_media_player_prefs_get_string_list (prefs, SYNC_PODCASTS_LIST);
 	     *iter != NULL;
@@ -561,8 +555,6 @@ hash_table_insert_some_podcasts (RBMediaPlayerPrefs *prefs,
 					(GtkTreeModelForeachFunc) rb_media_player_prefs_tree_view_insert,
 					&data);
 	}
-	
-	g_free (data);
 }
 
 static gboolean
