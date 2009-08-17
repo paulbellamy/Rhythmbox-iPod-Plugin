@@ -135,43 +135,65 @@ rb_media_player_prefs_dispose (GObject *object)
 	
 	priv->key_file = NULL;
 	
-	if (priv->group != NULL)
+	if (priv->group != NULL) {
 		g_free( priv->group );
+		priv->group = NULL;
+	}
 
-	if (priv->sync_playlists_list != NULL)
-		g_hash_table_unref ( priv->sync_playlists_list );
+	if (priv->sync_playlists_list != NULL) {
+		g_hash_table_destroy ( priv->sync_playlists_list );
+		priv->sync_playlists_list = NULL;
+	}
 	
-	if (priv->sync_podcasts_list != NULL)
-		g_hash_table_unref ( priv->sync_podcasts_list );
+	if (priv->sync_podcasts_list != NULL) {
+		g_hash_table_destroy ( priv->sync_podcasts_list );
+		priv->sync_podcasts_list = NULL;
+	}
 	
-	if (priv->sync_to_add != NULL)
+	if (priv->sync_to_add != NULL) {
 		g_list_free( priv->sync_to_add );
+		priv->sync_to_add = NULL;
+	}
 	
-	if (priv->sync_to_remove != NULL)
+	if (priv->sync_to_remove != NULL) {
 		g_list_free( priv->sync_to_remove );
+		priv->sync_to_remove = NULL;
+	}
 		
-	if (priv->itinerary_hash != NULL)
-		g_hash_table_unref (priv->itinerary_hash);
+	if (priv->itinerary_hash != NULL) {
+		g_hash_table_destroy (priv->itinerary_hash);
+		priv->itinerary_hash = NULL;
+	}
 		
-	if (priv->device_hash != NULL)	
-		g_hash_table_unref (priv->device_hash);
+	if (priv->device_hash != NULL) {
+		g_hash_table_destroy (priv->device_hash);
+		priv->device_hash = NULL;
+	}
 	
-	if (priv->source != NULL)
+	if (priv->source != NULL) {
 		g_object_unref (priv->source);
+		priv->source = NULL;
+	}
 	
-	if (priv->shell != NULL)
+	if (priv->shell != NULL) {
 		g_object_unref (priv->shell);
-		
-	if (priv->db != NULL)
+		priv->shell = NULL;
+	}
+	
+	if (priv->db != NULL) {
 		g_object_unref (priv->db);
+		priv->db = NULL;
+	}
 	
-	if (priv->updating != NULL)
+	if (priv->updating != NULL) {
 		g_mutex_free (priv->updating);
+		priv->updating = NULL;
+	}
 	
-	if (priv->waiting != NULL)
+	if (priv->waiting != NULL) {
 		g_mutex_free (priv->waiting);
-		
-	priv->source = NULL;
+		priv->waiting = NULL;
+	}
 	
 	G_OBJECT_CLASS (rb_media_player_prefs_parent_class)->dispose (object);
 }
@@ -747,7 +769,7 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 	g_object_get (shell, "db", &db, NULL);
 	
 	prefs = RB_MEDIA_PLAYER_PREFS (g_object_new (RB_TYPE_MEDIA_PLAYER_PREFS,
-						     "source", mp_source,
+						     "source", g_object_ref (mp_source),
 						     "shell", shell,
 						     "db", db,
 						     NULL));
