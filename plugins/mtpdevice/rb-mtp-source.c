@@ -1674,9 +1674,9 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 			       &parent_iter,
 			       NULL);
 	gtk_tree_store_set (tree_store, &parent_iter,
-			    0, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC),
+			    0, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC) || rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL),
 			    1, "Music Playlists",
-			    2, TRUE,
+			    2, !rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL),
 			    -1);
 	
 	list_iter = rb_playlist_manager_get_playlists ( (RBPlaylistManager *) rb_shell_get_playlist_manager (shell) );
@@ -1687,10 +1687,9 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		
 		// set this row's data
 		gtk_tree_store_set (tree_store, &tree_iter,
-				    0, rb_media_player_prefs_get_entry (prefs, SYNC_PLAYLISTS_LIST, name)
-				    	&& rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC),
+				    0, rb_media_player_prefs_get_entry_value (prefs, SYNC_PLAYLISTS_LIST, name),
 				    1, name,
-				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC),
+				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC) && !rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL),
 				    -1);
                 
 		list_iter = list_iter->next;
@@ -1701,9 +1700,9 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 			       &parent_iter,
 			       NULL);
 	gtk_tree_store_set (tree_store, &parent_iter,
-			    0, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS),
+			    0, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS) || rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL),
 			    1, "Podcasts",
-			    2, TRUE,
+			    2, !rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL),
 			    -1);
 	
 	GtkTreeModel *query_model = GTK_TREE_MODEL (rhythmdb_query_model_new_empty(library_db));
@@ -1720,10 +1719,9 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		// set up this row
 		name = strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE));
 		gtk_tree_store_set (tree_store, &tree_iter2,
-				    0, rb_media_player_prefs_get_entry (prefs, SYNC_PODCASTS_LIST, name)
-				    	&& rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS),
+				    0, rb_media_player_prefs_get_entry_value (prefs, SYNC_PODCASTS_LIST, name),
 				    1, name,
-				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS),
+				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS) && !rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL),
 				    -1);
 		g_free (name);
 		
