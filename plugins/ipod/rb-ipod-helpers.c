@@ -453,11 +453,11 @@ rb_ipod_helpers_is_ipod (GMount *mount, MPIDDevice *device_info)
 }
 
 char *
-rb_ipod_helpers_get_serial (GMount *mount, MPIDDevice *device_info)
+rb_ipod_helpers_get_serial (MPIDDevice *device_info)
 {
-	/* FIXME: What do we do to find the serial with libmediaplayerid????
-	 */
-	 return NULL;
+	char *serial;
+	g_object_get (device_info, "serial", &serial, NULL);
+	return serial;
 }
 
 gboolean rb_ipod_helpers_needs_init (GMount *mount)

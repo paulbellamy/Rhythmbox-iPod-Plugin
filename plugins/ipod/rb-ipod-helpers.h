@@ -42,7 +42,7 @@ guint64 rb_ipod_helpers_get_capacity (const char *mountpoint);
 guint64 rb_ipod_helpers_get_free_space (const char *mountpoint);
 char *rb_ipod_helpers_get_device (RBSource *source);
 gboolean rb_ipod_helpers_is_ipod (GMount *mount, MPIDDevice *device_info);
-char *rb_ipod_helpers_get_serial (GMount *mount, MPIDDevice *device_info);
+char *rb_ipod_helpers_get_serial (MPIDDevice *device_info);
 gboolean rb_ipod_helpers_needs_init (GMount *mount);
 void rb_ipod_helpers_hash_table_insert (gpointer key,
 					gpointer value,

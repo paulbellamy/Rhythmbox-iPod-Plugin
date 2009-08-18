@@ -1876,16 +1876,14 @@ rb_ipod_source_remove_playlist (RBiPodSource *ipod_source,
 static gchar *
 impl_get_serial (RBMediaPlayerSource *source)
 {
-	GMount *mount;
 	MPIDDevice *device_info;
 	g_object_get (source,
-		      "mount", &mount,
 		      "device-info", &device_info,
 		      NULL);
 	
-	gchar *serial = rb_ipod_helpers_get_serial (mount, device_info);
+	gchar *serial = rb_ipod_helpers_get_serial (device_info);
 	
-	g_object_unref (mount);
+	g_object_unref (device_info);
 	return serial;
 }
 
