@@ -1386,12 +1386,20 @@ rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 static void
 set_treeview_children (RBMtpSyncEntriesChangedData *data,
 		       GtkTreeIter *parent,
-		       guint list,
+		       enum SyncPrefKey list,
 		       gboolean value)
 {
 	GtkTreeIter iter;
 	gchar *name;
 	gboolean valid;
+	
+	/* Get a pointer to the function which tells us if we should sync it or not */
+	gboolean (*should_be_synced_func) (RBMediaPlayerPrefs *prefs, const gchar * name);
+	if (list == SYNC_PLAYLISTS_LIST)
+		should_be_synced_func = rb_media_player_prefs_playlist_should_be_synced;
+	else
+		should_be_synced_func = rb_media_player_prefs_podcast_should_be_synced;
+	
 	
 	valid = gtk_tree_model_iter_children (GTK_TREE_MODEL (data->tree_store), &iter, parent);
 		
@@ -1399,9 +1407,10 @@ set_treeview_children (RBMtpSyncEntriesChangedData *data,
 		gtk_tree_model_get (GTK_TREE_MODEL (data->tree_store), &iter,
 				    1, &name,
 				    -1);
+		
 		gtk_tree_store_set (data->tree_store, &iter,
-				    0, rb_media_player_prefs_entry_should_be_synced (data->prefs, list, name),
-				    2, value,
+		/* Active */	    0, should_be_synced_func (data->prefs, name),
+		/* Activatable */   2, value,
 				    -1);
 		
 		g_free (name);
@@ -1560,22 +1569,18 @@ rb_mtp_sync_entries_changed_cb (GtkCellRendererToggle *cell_renderer,
 		} else {
 			if (path[0] == '0') {
 				if (value)
-					rb_media_player_prefs_set_entry (data->prefs,	/* RBMediaPlayerPrefs * */
-								 SYNC_PLAYLISTS_LIST,	/* guint */
-							 	 name);			/* gchar * of the entry changed */
+					rb_media_player_prefs_set_playlist (data->prefs, /* RBMediaPlayerPrefs * */
+									    name);	 /* gchar * of the entry changed */
 				else
-					rb_media_player_prefs_remove_entry (data->prefs,
-									    SYNC_PLAYLISTS_LIST,
-									    name);
+					rb_media_player_prefs_remove_playlist (data->prefs,
+									       name);
 			} else {
 				if (value)
-					rb_media_player_prefs_set_entry (data->prefs,	/* RBMediaPlayerPrefs * */
-								 SYNC_PODCASTS_LIST,	/* guint */
-							 	 name);			/* gchar * of the entry changed */
+					rb_media_player_prefs_set_podcast (data->prefs, /* RBMediaPlayerPrefs * */
+									   name);	/* gchar * of the entry changed */
 				else
-					rb_media_player_prefs_remove_entry (data->prefs,
-									    SYNC_PODCASTS_LIST,
-									    name);
+					rb_media_player_prefs_remove_podcast (data->prefs,
+									      name);
 			}
 		}
 	}
@@ -1708,7 +1713,7 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		
 		/* set this row's data */
 		gtk_tree_store_set (tree_store, &tree_iter,
-				    0, rb_media_player_prefs_entry_should_be_synced (prefs, SYNC_PLAYLISTS_LIST, name),
+				    0, rb_media_player_prefs_playlist_should_be_synced (prefs, name),
 				    1, name,
 				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC) && !rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL),
 				    -1);
@@ -1740,7 +1745,7 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 		/* set up this row */
 		name = strdup(rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_TITLE));
 		gtk_tree_store_set (tree_store, &tree_iter2,
-				    0, rb_media_player_prefs_entry_should_be_synced (prefs, SYNC_PODCASTS_LIST, name),
+				    0, rb_media_player_prefs_podcast_should_be_synced (prefs, name),
 				    1, name,
 				    2, rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS) && !rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL),
 				    -1);

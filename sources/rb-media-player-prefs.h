@@ -83,18 +83,22 @@ void	 rb_media_player_prefs_set_list		( RBMediaPlayerPrefs *prefs,
 						  GList * list );
 GList *  rb_media_player_prefs_get_list		( RBMediaPlayerPrefs *prefs,
 						  enum SyncPrefKey pref_key );
-gchar *	 rb_media_player_prefs_get_entry	( RBMediaPlayerPrefs *prefs,
-						  enum SyncPrefKey pref_key,
-						  const gchar * entry );
-void	 rb_media_player_prefs_set_entry	( RBMediaPlayerPrefs *prefs,
-						  enum SyncPrefKey pref_key,
-						  const gchar * entry );
-void	 rb_media_player_prefs_remove_entry	( RBMediaPlayerPrefs *prefs,
-						  enum SyncPrefKey pref_key,
-						  const gchar *entry );
-gboolean rb_media_player_prefs_entry_should_be_synced ( RBMediaPlayerPrefs *prefs,
-							enum SyncPrefKey pref_key,
-							const gchar * entry );
+gchar *	 rb_media_player_prefs_get_playlist	( RBMediaPlayerPrefs *prefs,
+						  const gchar * name );
+gchar *	 rb_media_player_prefs_get_podcast	( RBMediaPlayerPrefs *prefs,
+						  const gchar * name );
+void	 rb_media_player_prefs_set_playlist	( RBMediaPlayerPrefs *prefs,
+						  const gchar * name );
+void	 rb_media_player_prefs_set_podcast	( RBMediaPlayerPrefs *prefs,
+						  const gchar * name );
+void	 rb_media_player_prefs_remove_playlist	( RBMediaPlayerPrefs *prefs,
+						  const gchar * name );
+void	 rb_media_player_prefs_remove_podcast	( RBMediaPlayerPrefs *prefs,
+						  const gchar * name );
+gboolean rb_media_player_prefs_playlist_should_be_synced ( RBMediaPlayerPrefs *prefs,
+							   const gchar * name );
+gboolean rb_media_player_prefs_podcast_should_be_synced ( RBMediaPlayerPrefs *prefs,
+							  const gchar * name );
 guint64	 rb_media_player_prefs_get_uint64	( RBMediaPlayerPrefs *prefs,
 						  enum SyncPrefKey pref_key );
 void	 rb_media_player_prefs_set_uint64	( RBMediaPlayerPrefs *prefs,
