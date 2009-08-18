@@ -318,13 +318,18 @@ connect_signal_handlers (GObject *source)
 	g_signal_connect_object (db,
 			  	 "entry-deleted",
 			  	 G_CALLBACK (auto_sync_cb),
-			  	 G_OBJECT(source),
+			  	 G_OBJECT (source),
 			  	 0);
 	g_signal_connect_object (db,
 			  	 "entry-changed",
 			  	 G_CALLBACK (auto_sync_cb_with_changes),
-				 G_OBJECT(source),
+				 G_OBJECT (source),
 			  	 0);
+	
+	/* Disconnect this one, so it is not called after the first load */
+	g_signal_handlers_disconnect_by_func (db,
+					      G_CALLBACK (connect_signal_handlers),
+					      G_OBJECT (source));
 	
         g_object_unref (G_OBJECT (db));
 	g_object_unref (G_OBJECT (shell));
@@ -340,7 +345,7 @@ disconnect_signal_handlers (GObject *source)
 	
 	g_signal_handlers_disconnect_by_func (db,
 					      G_CALLBACK (auto_sync_cb),
-					      G_OBJECT(source));
+					      G_OBJECT (source));
 	
 	g_object_unref (G_OBJECT (db));
 	g_object_unref (G_OBJECT (shell));
