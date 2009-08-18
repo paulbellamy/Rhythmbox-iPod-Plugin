@@ -1968,54 +1968,6 @@ set_treeview_children (RBiPodSyncEntriesChangedData *data,
 }
 
 static void
-rb_ipod_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
-				   gpointer         user_data)
-{
-	RBiPodSyncEntriesChangedData *data = user_data;
-	gboolean value = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton));
-	rb_media_player_prefs_set_boolean (data->prefs,
-				   SYNC_MUSIC_ALL,
-				   value);
-	
-	GtkTreeIter iter;
-	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "0") == TRUE) {
-		gtk_tree_store_set (data->tree_store, &iter,
-		/* Active */	    0, rb_media_player_prefs_get_boolean (data->prefs, SYNC_MUSIC) || value,
-		/* Activatable */   2, !value,
-				    -1);
-		
-		set_treeview_children (user_data,
-				       &iter,
-				       SYNC_PLAYLISTS_LIST,
-				       !value && rb_media_player_prefs_get_boolean (data->prefs, SYNC_MUSIC));
-	}
-}
-
-static void
-rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
-				      gpointer         user_data)
-{
-	RBiPodSyncEntriesChangedData *data = user_data;
-	gboolean value = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton));
-	rb_media_player_prefs_set_boolean (data->prefs,
-				   SYNC_PODCASTS_ALL,
-				   value);
-	
-	GtkTreeIter iter;
-	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "1") == TRUE) {
-		gtk_tree_store_set (data->tree_store, &iter,
-		/* Active */	    0, rb_media_player_prefs_get_boolean (data->prefs, SYNC_PODCASTS) || value,
-		/* Activatable */   2, !value,
-				    -1);
-		
-		set_treeview_children (user_data,
-				       &iter,
-				       SYNC_PODCASTS_LIST,
-				       !value && rb_media_player_prefs_get_boolean (data->prefs, SYNC_PODCASTS));
-	}
-}
-
-static void
 update_sync_preview_bar_notify_func (RBiPodSyncEntriesChangedData *data)
 {
 	/* Block the Preview Bar Mutex */
@@ -2078,6 +2030,58 @@ update_sync_preview_bar (RBiPodSyncEntriesChangedData *data)
 	/* Create a thread, so updating the sync bar does not block the UI */
 	g_idle_add ((GSourceFunc)update_sync_preview_bar_idle_cb,
 		    data);
+}
+
+static void
+rb_ipod_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
+				   gpointer         user_data)
+{
+	RBiPodSyncEntriesChangedData *data = user_data;
+	gboolean value = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton));
+	rb_media_player_prefs_set_boolean (data->prefs,
+				   SYNC_MUSIC_ALL,
+				   value);
+	
+	GtkTreeIter iter;
+	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "0") == TRUE) {
+		gtk_tree_store_set (data->tree_store, &iter,
+		/* Active */	    0, rb_media_player_prefs_get_boolean (data->prefs, SYNC_MUSIC) || value,
+		/* Activatable */   2, !value,
+				    -1);
+		
+		set_treeview_children (user_data,
+				       &iter,
+				       SYNC_PLAYLISTS_LIST,
+				       !value && rb_media_player_prefs_get_boolean (data->prefs, SYNC_MUSIC));
+	}
+	
+	update_sync_preview_bar (data);
+}
+
+static void
+rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
+				      gpointer         user_data)
+{
+	RBiPodSyncEntriesChangedData *data = user_data;
+	gboolean value = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton));
+	rb_media_player_prefs_set_boolean (data->prefs,
+				   SYNC_PODCASTS_ALL,
+				   value);
+	
+	GtkTreeIter iter;
+	if (gtk_tree_model_get_iter_from_string (GTK_TREE_MODEL (data->tree_store), &iter, "1") == TRUE) {
+		gtk_tree_store_set (data->tree_store, &iter,
+		/* Active */	    0, rb_media_player_prefs_get_boolean (data->prefs, SYNC_PODCASTS) || value,
+		/* Activatable */   2, !value,
+				    -1);
+		
+		set_treeview_children (user_data,
+				       &iter,
+				       SYNC_PODCASTS_LIST,
+				       !value && rb_media_player_prefs_get_boolean (data->prefs, SYNC_PODCASTS));
+	}
+	
+	update_sync_preview_bar (data);
 }
 
 static void
