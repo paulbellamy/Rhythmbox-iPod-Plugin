@@ -42,14 +42,12 @@ typedef struct {
 	GKeyFile *key_file;
 	gchar *group;
 	GMutex *updating;
-	GMutex *waiting;
 	
 	/* Pointers to stuff for setting up the sync */
 	RBMediaPlayerSource *source;
 	
 	/* lazy-loading style for building sync lists. */
 	gboolean sync_updated;
-	
 	
 	/* loaded/saved to file */
 	gboolean sync_auto;
@@ -176,11 +174,6 @@ rb_media_player_prefs_dispose (GObject *object)
 	if (priv->updating != NULL) {
 		g_mutex_free (priv->updating);
 		priv->updating = NULL;
-	}
-	
-	if (priv->waiting != NULL) {
-		g_mutex_free (priv->waiting);
-		priv->waiting = NULL;
 	}
 	
 	G_OBJECT_CLASS (rb_media_player_prefs_parent_class)->dispose (object);
@@ -586,16 +579,7 @@ rb_media_player_prefs_update_sync ( RBMediaPlayerPrefs *prefs )
 	
 	if (!g_mutex_trylock (priv->updating)) {
 		/* If we are already updating */
-		if (!g_mutex_trylock (priv->waiting)) {
-			/* If we have another one waiting... */
-			g_mutex_lock (priv->updating);
-			g_mutex_unlock (priv->updating);
-			return FALSE;
-		} else {
-			/* Wait... */
-			g_mutex_lock (priv->updating);
-			g_mutex_unlock (priv->waiting);
-		}
+		return FALSE;
 	}
 	
 	rb_media_player_prefs_update_sync_helper (prefs);
@@ -731,9 +715,6 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 	g_assert (priv->updating == NULL);
 	priv->updating = g_mutex_new ();
 	
-	g_assert (priv->waiting == NULL);
-	priv->waiting = g_mutex_new ();
-	
      	return prefs;
 }
 
@@ -751,6 +732,7 @@ rb_media_player_prefs_get_boolean ( RBMediaPlayerPrefs *prefs,
 		case SYNC_PODCASTS_ALL:	return priv->sync_podcasts_all;
 		case SYNC_UPDATED:	return priv->sync_updated;
 		default:		g_assert_not_reached();
+					return FALSE;
 	}
 }
 
@@ -813,7 +795,8 @@ rb_media_player_prefs_set_boolean ( RBMediaPlayerPrefs *prefs,
 					break;
 		case SYNC_UPDATED:	priv->sync_updated = value; /* Not stored in key file */
 					return;
-		default:		break;
+		default:		g_assert_not_reached();
+					return;
 	}
 	
 	rb_media_player_prefs_save_file (prefs, NULL);

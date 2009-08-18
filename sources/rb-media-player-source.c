@@ -41,7 +41,6 @@ typedef struct {
 	GKeyFile **key_file;
 	
 	GMutex *syncing;
-	GMutex *waiting;
 	
 } RBMediaPlayerSourcePrivate;
 
@@ -147,11 +146,6 @@ rb_media_player_source_dispose (GObject *object)
 		priv->syncing = NULL;
 	}
 	
-	if (priv->waiting != NULL) {
-		g_mutex_free (priv->waiting);
-		priv->waiting = NULL;
-	}
-	
 	G_OBJECT_CLASS (rb_media_player_source_parent_class)->dispose (object);
 }
 
@@ -207,10 +201,7 @@ rb_media_player_source_load		(RBMediaPlayerSource *source)
 	
 	g_assert (priv->syncing == NULL);
 	priv->syncing = g_mutex_new ();
-	
-	g_assert (priv->waiting == NULL);
-	priv->waiting = g_mutex_new ();
-	
+		
 	connect_signal_handlers (G_OBJECT (source));
 }
 
@@ -475,6 +466,7 @@ sync_idle_cb_add_entries (RBMediaPlayerSource *source)
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
 	/* Transfer needed tracks and podcasts from itinerary to device */
+	/* This won't block the UI */
 	rb_media_player_source_add_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_ADD) );
 	
 	/* Done with this list, clear it. */
@@ -543,15 +535,8 @@ sync_idle_cb_start (RBMediaPlayerSource *source)
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
 	if (!g_mutex_trylock (priv->syncing)) {
-		/* If we are already syncing */
-		if (!g_mutex_trylock (priv->waiting)) {
-			/* If we have another one waiting */
-			return FALSE;
-		} else {
-			/* Wait... */
-			g_mutex_lock (priv->syncing);
-			g_mutex_unlock (priv->waiting);
-		}
+		/* Already syncing */
+		return FALSE;
 	}
 	
 	g_idle_add ((GSourceFunc)sync_idle_cb_update_sync,
