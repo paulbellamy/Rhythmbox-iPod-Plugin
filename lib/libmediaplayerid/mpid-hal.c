@@ -101,7 +101,7 @@ find_portable_audio_player_udi (LibHalContext *context, MPIDDevice *device, cons
 	udi = g_strdup (udis[0]);
 	libhal_free_string_array (udis);
 
-	/* while we're here, grab the volume UUID */
+	/* while we're here, grab the volume UUID and serial number */
 	device->fs_uuid = libhal_device_get_property_string (context, udi, "volume.uuid", &error);
 	free_dbus_error ("finding volume UUID", &error);
 
@@ -111,6 +111,12 @@ find_portable_audio_player_udi (LibHalContext *context, MPIDDevice *device, cons
 	dbus_error_init (&error);
 	while (!libhal_device_query_capability (context, udi, "portable_audio_player", &error) && !dbus_error_is_set (&error)) {
 		char *new_udi;
+
+		/* look for the device serial along the way */
+		if (device->serial == NULL) {
+			device->serial = libhal_device_get_property_string (context, udi, "storage.serial", &error);
+			free_dbus_error ("finding device serial", &error);
+		}
 
 		new_udi = libhal_device_get_property_string (context, udi, "info.parent", &error);
 		if (dbus_error_is_set (&error))
