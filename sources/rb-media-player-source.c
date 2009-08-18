@@ -256,6 +256,15 @@ rb_media_player_source_add_entries	(RBMediaPlayerSource *source,
 }
 
 void
+rb_media_player_source_trash_entry	(RBMediaPlayerSource *source,
+					 RhythmDBEntry *entry)
+{
+	RBMediaPlayerSourceClass *klass = RB_MEDIA_PLAYER_SOURCE_GET_CLASS (source);
+
+	return klass->impl_trash_entry (source, entry);
+}
+
+void
 rb_media_player_source_trash_entries	(RBMediaPlayerSource *source,
 					 GList *entries)
 {
@@ -481,11 +490,15 @@ sync_idle_cb_trash_entries (RBMediaPlayerSource *source)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
-	/* Remove tracks and podcasts on device, but not in itinerary */
-	rb_media_player_source_trash_entries ( source, rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_REMOVE) );
-	
-	/* Done with this list, clear it. */
-	rb_media_player_prefs_set_list (priv->prefs, SYNC_TO_REMOVE, NULL);
+	/* Remove a track or podcast off the iPod, and re-queue so we don't block the UI */
+	GList *iter = rb_media_player_prefs_get_list (priv->prefs, SYNC_TO_REMOVE);
+	if (iter != NULL) {
+		rb_media_player_source_trash_entry (source, iter->data);
+		rb_media_player_prefs_set_list (priv->prefs, SYNC_TO_REMOVE, iter->next);
+		iter->next = NULL;
+		g_list_free (iter);
+		return TRUE;
+	}
 	
 	g_idle_add ((GSourceFunc)sync_idle_cb_add_entries,
 		    source);

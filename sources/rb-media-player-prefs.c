@@ -821,11 +821,9 @@ rb_media_player_prefs_set_list ( RBMediaPlayerPrefs *prefs,
 	
 	switch (pref_key) {
 		case SYNC_TO_ADD:
-			g_list_free(priv->sync_to_add);
 			priv->sync_to_add = list;
 			break;
 		case SYNC_TO_REMOVE:
-			g_list_free(priv->sync_to_remove);
 			priv->sync_to_remove = list;
 			break;
 		default:

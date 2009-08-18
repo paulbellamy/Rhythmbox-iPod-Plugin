@@ -108,6 +108,7 @@ static guint64 impl_get_free_space (RBMediaPlayerSource *source);
 static GHashTable * impl_get_entries (RBMediaPlayerSource *source);
 static GHashTable * impl_get_podcasts (RBMediaPlayerSource *source);
 static void impl_add_entries (RBMediaPlayerSource *source, GList *entries);
+static void impl_trash_entry (RBMediaPlayerSource *source, RhythmDBEntry *entry);
 static void impl_trash_entries (RBMediaPlayerSource *source, GList *entries);
 static void impl_add_playlist (RBMediaPlayerSource *source, gchar *name, GList *entries);
 static void impl_trash_playlist (RBMediaPlayerSource *source, gchar *name);
@@ -208,6 +209,7 @@ rb_ipod_source_class_init (RBiPodSourceClass *klass)
 	mps_class->impl_get_capacity = impl_get_capacity;
 	mps_class->impl_get_free_space = impl_get_free_space;
 	mps_class->impl_add_entries = impl_add_entries;
+	mps_class->impl_trash_entry = impl_trash_entry;
 	mps_class->impl_trash_entries = impl_trash_entries;
 	mps_class->impl_add_playlist = impl_add_playlist;
 	mps_class->impl_trash_playlist = impl_trash_playlist;
@@ -1137,39 +1139,51 @@ impl_show_popup (RBSource *source)
 	return TRUE;
 }
 
+/* Trashes a single entry, then return true, unless there are no more entries */
+static void
+impl_trash_entry (RBMediaPlayerSource *source, RhythmDBEntry *entry)
+{
+	if (entry == NULL)
+		return;
+	
+	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
+	RhythmDB *db = get_db_for_source ((RBiPodSource *)source);
+	const gchar *uri;
+	gchar *file;
+	Itdb_Track *track;
+	
+	uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
+	track = g_hash_table_lookup (priv->entry_map, entry);
+	if (track == NULL) {
+		g_warning ("Couldn't find track on ipod! (%s)", uri);
+		return;
+	}
+	
+	rb_ipod_db_remove_track (priv->ipod_db, track);
+	g_hash_table_remove (priv->entry_map, entry);
+	file = g_filename_from_uri (uri, NULL, NULL);
+	
+	if (file != NULL)
+		g_unlink (file);
+	
+	g_free (file);
+	rhythmdb_entry_delete (db, entry);
+	
+	rhythmdb_commit (db);
+	g_object_unref (db);
+}
+
 static void
 impl_trash_entries (RBMediaPlayerSource *source, GList *entries)
 {
-	RBiPodSourcePrivate *priv = IPOD_SOURCE_GET_PRIVATE (source);
-	RhythmDB *db;
 	GList *tem;
 
-	db = get_db_for_source ((RBiPodSource *)source);
-	for (tem = entries; tem != NULL; tem = tem->next) {
-		RhythmDBEntry *entry;
-		const gchar *uri;
-		gchar *file;
-		Itdb_Track *track;
-
-		entry = (RhythmDBEntry *)tem->data;
-		uri = rhythmdb_entry_get_string (entry, RHYTHMDB_PROP_LOCATION);
-		track = g_hash_table_lookup (priv->entry_map, entry);
-		if (track == NULL) {
-			g_warning ("Couldn't find track on ipod! (%s)", uri);
-			continue;
-		}
-
-		rb_ipod_db_remove_track (priv->ipod_db, track);
-		g_hash_table_remove (priv->entry_map, entry);
-		file = g_filename_from_uri (uri, NULL, NULL);
-		if (file != NULL)
-			g_unlink (file);
-		g_free (file);
-		rhythmdb_entry_delete (db, entry);
+	for (tem = entries;
+	     tem != NULL;
+	     tem = tem->next)
+	{
+		impl_trash_entry (source, tem->data);
 	}
-
-	rhythmdb_commit (db);
-	g_object_unref (db);
 }
 
 static void

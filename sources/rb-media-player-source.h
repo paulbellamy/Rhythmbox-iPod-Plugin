@@ -62,6 +62,7 @@ typedef struct
 	guint64		(*impl_get_capacity)	(RBMediaPlayerSource *source);
 	guint64		(*impl_get_free_space)	(RBMediaPlayerSource *source);
 	void		(*impl_add_entries)	(RBMediaPlayerSource *source, GList *entries);
+	void		(*impl_trash_entry)	(RBMediaPlayerSource *source, RhythmDBEntry *entry);
 	void		(*impl_trash_entries)	(RBMediaPlayerSource *source, GList *entries);
 	void		(*impl_add_playlist)	(RBMediaPlayerSource *source, gchar *name, GList *entries);
 	void		(*impl_trash_playlist)	(RBMediaPlayerSource *source, gchar *name);
@@ -84,6 +85,8 @@ guint64 rb_media_player_source_get_free_space (RBMediaPlayerSource *source);
 
 void	rb_media_player_source_add_entries	(RBMediaPlayerSource *source,
 						 GList *entries);
+void	rb_media_player_source_trash_entry	(RBMediaPlayerSource *source,
+						 RhythmDBEntry *entry);
 void	rb_media_player_source_trash_entries	(RBMediaPlayerSource *source,
 						 GList *entries);
 void	rb_media_player_source_add_playlist	(RBMediaPlayerSource *source,
