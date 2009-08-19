@@ -212,6 +212,9 @@ rb_media_player_source_load		(RBMediaPlayerSource *source)
 	
 	if (rhythmdb_is_loaded (db)) {
 		connect_signal_handlers (G_OBJECT (source));
+		/* FIXME: Disabled until implemented
+		auto_sync_cb (NULL, NULL, source);
+		*/
 	} else {
 		g_signal_connect_object (db,
 			  		 "load-complete",
@@ -330,6 +333,10 @@ connect_signal_handlers_cb (RhythmDB *db, GObject *source)
 					      G_OBJECT (source));
 	
 	connect_signal_handlers (source);
+	
+	/* FIXME: Disabled until implemented
+	auto_sync_cb (db, NULL, source);
+	*/
 }
 
 static void
