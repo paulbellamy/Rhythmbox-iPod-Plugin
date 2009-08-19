@@ -687,9 +687,9 @@ rb_media_player_prefs_new (GKeyFile **key_file, GObject *source)
 	if ( !g_key_file_has_group(priv->key_file, priv->group) ) {
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_auto", FALSE);
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_music_all", TRUE);
 		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts", FALSE);
-		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", FALSE);
+		g_key_file_set_boolean (priv->key_file, priv->group, "sync_podcasts_all", TRUE);
 		g_key_file_set_string_list (priv->key_file, priv->group, "sync_playlists_list", (const gchar * const *) "", 0);
 		g_key_file_set_string_list (priv->key_file, priv->group, "sync_podcasts_list", (const gchar * const *) "", 0);
 	}
