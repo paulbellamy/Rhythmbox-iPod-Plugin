@@ -33,6 +33,7 @@
 #include "rb-shell.h"
 #include "rb-media-player-source.h"
 #include "rb-media-player-prefs.h"
+#include "rb-dialog.h"
 #include "rb-debug.h"
 
 typedef struct {
@@ -538,9 +539,9 @@ sync_idle_cb_check_space (RBMediaPlayerSource *source)
 	
 	/* Check we have enough space, on the iPod. */
 	if (rb_media_player_prefs_get_uint64 (priv->prefs, SYNC_SPACE_NEEDED) > rb_media_player_source_get_capacity (source)) {
-		/* Not enough Space on Device throw up an error */
-		rb_debug("Not enough Free Space on Device.\n");
 		g_mutex_unlock (priv->syncing);
+		rb_debug("Not enough Free Space on Device.\n");
+		rb_error_dialog (NULL, ("Not enough free space to sync"), "There is not enough free space on this device to sync all of the selected options.");
 		return FALSE;
 	}
 	
