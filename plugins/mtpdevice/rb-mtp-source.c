@@ -101,8 +101,10 @@ static void rb_mtp_info_response_cb (GtkDialog *dialog,
 				     int response_id,
 				     RBMtpSource *source);
 
+/* FIXME: Disabled until Implemented.
 static void rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 					 gpointer         user_data);
+*/
 
 static void rb_mtp_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
 					      gpointer         user_data);
@@ -1373,6 +1375,7 @@ typedef struct {
 	RBMediaPlayerSource *source;
 } RBMtpSyncEntriesChangedData;
 
+/* FIXME: Disabled until Implemented.
 static void
 rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 			     gpointer         user_data)
@@ -1382,6 +1385,7 @@ rb_mtp_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 				   	   SYNC_AUTO,
 				   	   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
 }
+*/
 
 static void
 set_treeview_children (RBMtpSyncEntriesChangedData *data,
@@ -1785,12 +1789,17 @@ impl_show_properties	(RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_object_unref (shell);
 	g_object_unref (tree_store);
 	
+	/* FIXME: Commented until the
+	 * "Sync Automatically" option
+	 * is implemented.
+	 *
 	label = gtk_builder_get_object (builder, "checkbutton-mtp-sync-auto");
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      rb_media_player_prefs_get_boolean (prefs, SYNC_AUTO));
  	g_signal_connect (label, "toggled",
  			  (GCallback)rb_mtp_sync_auto_changed_cb,
  			  entries_changed_data);
+ 	*/
 	
 	label = gtk_builder_get_object (builder, "checkbutton-mtp-sync-music-all");
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),

@@ -95,9 +95,10 @@ static gboolean rb_ipod_song_artwork_add_cb (RhythmDB *db,
                                              const gchar *property_name,
                                              const GValue *metadata,
                                              RBiPodSource *isource);
-                                             
+/* FIXME: disabled until implemented      
 static void rb_ipod_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 					  gpointer         user_data);
+*/
 static void rb_ipod_sync_music_all_changed_cb (GtkToggleButton *togglebutton,
 					       gpointer         user_data);
 static void rb_ipod_sync_podcasts_all_changed_cb (GtkToggleButton *togglebutton,
@@ -1929,6 +1930,7 @@ typedef struct {
 	const gchar *mp;
 } RBiPodSyncEntriesChangedData;
 
+/* FIXME: Disabled until implemented
 static void
 rb_ipod_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 			      gpointer         user_data)
@@ -1938,6 +1940,7 @@ rb_ipod_sync_auto_changed_cb (GtkToggleButton *togglebutton,
 				   SYNC_AUTO,
 				   gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (togglebutton)));
 }
+*/
 
 static void
 set_treeview_children (RBiPodSyncEntriesChangedData *data,
@@ -2342,16 +2345,19 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_object_unref (shell);
 	g_object_unref (tree_store);
 	
+	/* FIXME: Commented until the
+	 * "sync automatically" option
+	 * is implemented.
+	 *
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-auto");
-	/* Needs to be on if rb_ipod_helpers_get_autosync */
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      rb_media_player_prefs_get_boolean (prefs, SYNC_AUTO));
  	g_signal_connect (label, "toggled",
  			  (GCallback)rb_ipod_sync_auto_changed_cb,
  			  entries_changed_data);
+ 	*/
 	
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-music-all");
-	/* Needs to be on if rb_ipod_helpers_get_autosync */
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      rb_media_player_prefs_get_boolean (prefs, SYNC_MUSIC_ALL));
  	g_signal_connect (label, "toggled",
@@ -2359,7 +2365,6 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
  			  entries_changed_data);
 	
 	label = gtk_builder_get_object (builder, "checkbutton-ipod-sync-podcasts-all");
-	/* Needs to be on if rb_ipod_helpers_get_autosync */
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (label),
 				      rb_media_player_prefs_get_boolean (prefs, SYNC_PODCASTS_ALL));
  	g_signal_connect (label, "toggled",

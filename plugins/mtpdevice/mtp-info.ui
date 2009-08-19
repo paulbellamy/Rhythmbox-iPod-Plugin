@@ -408,6 +408,7 @@
                         <property name="n_rows">4</property>
                         <property name="column_spacing">12</property>
                         <property name="row_spacing">6</property>
+                     <!-- FIXME: Commented until the "sync automatically" option is implemented
                         <child>
                           <object class="GtkCheckButton" id="checkbutton-mtp-sync-auto">
                             <property name="label" translatable="yes">Sync Automatically</property>
@@ -421,6 +422,7 @@
                             <property name="y_options"></property>
                           </packing>
                         </child>
+                     -->
                         <child>
                           <object class="GtkScrolledWindow" id="scrolledwindow1">
                             <property name="visible">True</property>

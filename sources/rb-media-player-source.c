@@ -68,7 +68,7 @@ static void rb_media_player_source_get_property (GObject *object,
 					 guint prop_id,
 					 GValue *value,
 					 GParamSpec *pspec);
-
+/* FIXME: Disabled until implemented
 static void auto_sync_cb_with_changes (RhythmDB *db,
 			   	       RhythmDBEntry *entry,
 			   	       GSList *changes,
@@ -76,6 +76,7 @@ static void auto_sync_cb_with_changes (RhythmDB *db,
 static void auto_sync_cb (RhythmDB *db,
 			  RhythmDBEntry *entry,
 			  RBMediaPlayerSource *source);
+*/
 
 enum
 {
@@ -333,6 +334,7 @@ connect_signal_handlers_cb (RhythmDB *db, GObject *source)
 static void
 connect_signal_handlers (GObject *source)
 {
+	/* FIXME: Disabled until implemented
 	RBShell *shell;
 	RhythmDB *db;
 	g_object_get (source, "shell", &shell, NULL);
@@ -356,11 +358,13 @@ connect_signal_handlers (GObject *source)
 	
         g_object_unref (G_OBJECT (db));
 	g_object_unref (G_OBJECT (shell));
+	*/
 }
 
 static void
 disconnect_signal_handlers (GObject *source)
 {
+	/* FIXME: Disabled Until Implemented
 	RBShell *shell;
 	RhythmDB *db;
 	g_object_get (source, "shell", &shell, NULL);
@@ -372,8 +376,10 @@ disconnect_signal_handlers (GObject *source)
 	
 	g_object_unref (G_OBJECT (db));
 	g_object_unref (G_OBJECT (shell));
+	*/
 }
 
+/* FIXME: Disabled until Implemented.
 static void
 auto_sync_cb_with_changes (RhythmDB *db,
 			   RhythmDBEntry *entry,
@@ -390,12 +396,12 @@ auto_sync_cb (RhythmDB *db,
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 
-	/* Something changed in the database, sync needs to rebuild update list */
 	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
 	
 	if (rb_media_player_prefs_get_boolean (priv->prefs, SYNC_AUTO))
 		rb_media_player_source_sync (source);
 }
+*/
 
 void
 rb_media_player_source_show_properties (RBMediaPlayerSource *source)
