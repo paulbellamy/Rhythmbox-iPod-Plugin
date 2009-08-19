@@ -191,6 +191,8 @@ struct _RhythmDBPrivate
 	gboolean can_save;
 	gboolean saving;
 	gboolean dirty;
+	
+	gboolean loaded;
 
 	GHashTable *entry_type_map;
 	GMutex *entry_type_map_mutex;

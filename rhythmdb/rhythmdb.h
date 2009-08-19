@@ -494,6 +494,7 @@ char *		rhythmdb_compute_status_normal		(gint n_songs, glong duration,
 							 guint64 size,
 							 const char *singular,
 							 const char *plural);
+gboolean	rhythmdb_is_loaded			(RhythmDB *db);
 
 RhythmDBEntryType rhythmdb_entry_register_type          (RhythmDB *db, const char *name);
 RhythmDBEntryType rhythmdb_entry_type_get_by_name       (RhythmDB *db, const char *name);
