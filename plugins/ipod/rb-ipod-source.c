@@ -2388,7 +2388,7 @@ impl_show_properties (RBMediaPlayerSource *source, RBMediaPlayerPrefs *prefs)
 	g_free (text);
 
  	label = gtk_builder_get_object (builder, "label-serial-number-value");
-	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "pszSerialNumber"));
+	gtk_label_set_text (GTK_LABEL (label), impl_get_serial (source));
 
  	label = gtk_builder_get_object (builder, "label-firmware-version-value");
 	gtk_label_set_text (GTK_LABEL (label), itdb_device_get_sysinfo (ipod_dev, "VisibleBuildID"));
