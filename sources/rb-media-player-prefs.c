@@ -63,7 +63,7 @@ typedef struct {
 	GHashTable * device_hash;
 	GList *  sync_to_add;
 	GList *  sync_to_remove;
-	guint64	 sync_space_needed; /* The space used after syncing */
+	gint64	 sync_space_needed; /* The space used after syncing */
 	
 } RBMediaPlayerPrefsPrivate;
 
@@ -947,8 +947,8 @@ rb_media_player_prefs_remove_podcast ( RBMediaPlayerPrefs *prefs,
 	rb_media_player_prefs_save_file (prefs, NULL);
 }
 				  
-guint64
-rb_media_player_prefs_get_uint64 ( RBMediaPlayerPrefs *prefs,
+gint64
+rb_media_player_prefs_get_int64 ( RBMediaPlayerPrefs *prefs,
 				   enum SyncPrefKey pref_key )
 {
 	RBMediaPlayerPrefsPrivate *priv = MEDIA_PLAYER_PREFS_GET_PRIVATE (prefs);
@@ -963,7 +963,7 @@ rb_media_player_prefs_get_uint64 ( RBMediaPlayerPrefs *prefs,
 }
 
 void
-rb_media_player_prefs_set_uint64 ( RBMediaPlayerPrefs *prefs,
+rb_media_player_prefs_set_int64 ( RBMediaPlayerPrefs *prefs,
 				   enum SyncPrefKey pref_key,
 				   guint64 value )
 {

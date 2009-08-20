@@ -2018,10 +2018,10 @@ update_sync_preview_bar_notify_func (RBiPodSyncEntriesChangedData *data)
 	char *capacity;
 	double frac;
 	
-	frac = (rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED))/(double)rb_ipod_helpers_get_capacity (mp);
+	frac = (rb_media_player_prefs_get_int64 (data->prefs, SYNC_SPACE_NEEDED))/(double)rb_ipod_helpers_get_capacity (mp);
 	frac = (frac > 1.0 ? 1.0 : frac);
 	frac = (frac < 0.0 ? 0.0 : frac);
-	used = g_format_size_for_display (rb_media_player_prefs_get_uint64 (data->prefs, SYNC_SPACE_NEEDED));
+	used = g_format_size_for_display (rb_media_player_prefs_get_int64 (data->prefs, SYNC_SPACE_NEEDED));
 	capacity = g_format_size_for_display (rb_ipod_helpers_get_capacity(mp));
 	gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (data->preview_bar), 
 				       frac);

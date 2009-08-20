@@ -545,10 +545,11 @@ sync_idle_cb_check_space (RBMediaPlayerSource *source)
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
 	
 	/* Check we have enough space, on the iPod. */
-	if (rb_media_player_prefs_get_uint64 (priv->prefs, SYNC_SPACE_NEEDED) > rb_media_player_source_get_capacity (source)) {
-		g_mutex_unlock (priv->syncing);
+	if (rb_media_player_prefs_get_int64 (priv->prefs, SYNC_SPACE_NEEDED) > rb_media_player_source_get_capacity (source)) {
 		rb_debug("Not enough Free Space on Device.\n");
 		rb_error_dialog (NULL, ("Not enough free space to sync"), "There is not enough free space on this device to sync all of the selected options.");
+		g_idle_add ((GSourceFunc)sync_idle_cb_cleanup,
+			    source);
 		return FALSE;
 	}
 	

@@ -99,9 +99,9 @@ gboolean rb_media_player_prefs_playlist_should_be_synced ( RBMediaPlayerPrefs *p
 							   const gchar * name );
 gboolean rb_media_player_prefs_podcast_should_be_synced ( RBMediaPlayerPrefs *prefs,
 							  const gchar * name );
-guint64	 rb_media_player_prefs_get_uint64	( RBMediaPlayerPrefs *prefs,
+gint64	 rb_media_player_prefs_get_int64	( RBMediaPlayerPrefs *prefs,
 						  enum SyncPrefKey pref_key );
-void	 rb_media_player_prefs_set_uint64	( RBMediaPlayerPrefs *prefs,
+void	 rb_media_player_prefs_set_int64	( RBMediaPlayerPrefs *prefs,
 						  enum SyncPrefKey pref_key,
 						  guint64 value );
 
