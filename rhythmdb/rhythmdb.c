@@ -2614,10 +2614,6 @@ rhythmdb_process_one_event (RhythmDBEvent *event, RhythmDB *db)
 		break;
 	case RHYTHMDB_EVENT_DB_LOAD:
 		rb_debug ("processing RHYTHMDB_EVENT_DB_LOAD");
-		
-		/* Set the loaded flag */
-		db->priv->loaded = TRUE;
-		
 		g_signal_emit (G_OBJECT (db), rhythmdb_signals[LOAD_COMPLETE], 0);
 
 		/* save the db every five minutes */
@@ -4622,21 +4618,6 @@ rhythmdb_compute_status_normal (gint n_songs,
 	g_free (size_str);
 
 	return ret;
-}
-
-/**
- * rhythmdb_is_loaded:
- * @db: The db in question
- *
- * Returns a gboolean indicating whether the database
- * is finished loading.
- *
- * Returns: a gboolean.
- **/
-gboolean
-rhythmdb_is_loaded (RhythmDB *db)
-{
-	return db->priv->loaded;
 }
 
 static void

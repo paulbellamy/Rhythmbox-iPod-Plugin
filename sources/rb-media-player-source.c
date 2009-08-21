@@ -59,7 +59,6 @@ static GObject *rb_media_player_source_constructor (GType type,
 static void rb_media_player_source_init (RBMediaPlayerSource *source);
 static void rb_media_player_source_dispose (GObject *object);
 
-static void connect_signal_handlers_cb (RhythmDB *db, GObject *source);
 static void connect_signal_handlers (GObject *source);
 static void disconnect_signal_handlers (GObject *source);
 
@@ -217,23 +216,20 @@ void
 rb_media_player_source_load		(RBMediaPlayerSource *source)
 {
 	RBMediaPlayerSourcePrivate *priv = MEDIA_PLAYER_SOURCE_GET_PRIVATE (source);
-	RBShell *shell;
-	RhythmDB *db;
 	
 	priv->prefs = rb_media_player_prefs_new ( priv->key_file,
 						  G_OBJECT (source) );
 	
 	g_assert (priv->syncing == NULL);
 	priv->syncing = g_mutex_new ();
-	
+	/* FIXME: Disabled until implemented
 	g_object_get (source, "shell", &shell, NULL);
 	g_object_get (shell, "db", &db, NULL);
 	
 	if (rhythmdb_is_loaded (db)) {
 		connect_signal_handlers (G_OBJECT (source));
-		/* FIXME: Disabled until implemented
+
 		auto_sync_cb (NULL, NULL, source);
-		*/
 	} else {
 		g_signal_connect_object (db,
 			  		 "load-complete",
@@ -244,6 +240,8 @@ rb_media_player_source_load		(RBMediaPlayerSource *source)
 	
 	g_object_unref (db);
 	g_object_unref (shell);
+	*/
+	connect_signal_handlers (G_OBJECT (source));
 }
 
 GHashTable *
@@ -344,21 +342,6 @@ rb_media_player_source_get_name (RBMediaPlayerSource *source)
 }
 
 static void
-connect_signal_handlers_cb (RhythmDB *db, GObject *source)
-{
-	/* Disconnect this one, so it is not called after the first load */
-	g_signal_handlers_disconnect_by_func (db,
-					      G_CALLBACK (connect_signal_handlers_cb),
-					      G_OBJECT (source));
-	
-	connect_signal_handlers (source);
-	
-	/* FIXME: Disabled until implemented
-	auto_sync_cb (db, NULL, source);
-	*/
-}
-
-static void
 connect_signal_handlers (GObject *source)
 {
 	/* FIXME: Disabled until implemented
@@ -382,6 +365,13 @@ connect_signal_handlers (GObject *source)
 			  	 G_CALLBACK (auto_sync_cb_with_changes),
 				 G_OBJECT (source),
 			  	 0);
+	
+	* Disconnect this one,
+	* so it is not called after
+	* the first load
+	g_signal_handlers_disconnect_by_func (db,
+					      G_CALLBACK (connect_signal_handlers),
+					      G_OBJECT (source));
 	
         g_object_unref (G_OBJECT (db));
 	g_object_unref (G_OBJECT (shell));
