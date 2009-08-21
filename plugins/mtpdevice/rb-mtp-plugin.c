@@ -373,9 +373,11 @@ create_source_device_cb (RBRemovableMediaManager *rmm, GObject *device, RBMtpPlu
 				rb_debug ("unable to open device.  weird.");
 				break;
 			}
+			
+			GtkAction *sync_action = gtk_action_group_get_action (plugin->action_group, "MTPSourceSync");
 
 			rb_debug ("device matched, creating a source");
-			source = rb_mtp_source_new (plugin->shell, device, &plugin->key_file);
+			source = rb_mtp_source_new (plugin->shell, device, &plugin->key_file, sync_action);
 			plugin->mtp_sources = g_list_prepend (plugin->mtp_sources, source);
 			g_signal_connect_object (G_OBJECT (source),
 						"deleted", G_CALLBACK (source_deleted_cb),
@@ -395,7 +397,9 @@ create_source_cb (RBMtpPlugin *plugin, LIBMTP_mtpdevice_t *device, const char *u
 {
 	RBSource *source;
 
-	source = RB_SOURCE (rb_mtp_source_new (plugin->shell, device, udi, &plugin->key_file));
+	GtkAction *sync_action = gtk_action_group_get_action (plugin->action_group, "MTPSourceSync");
+
+	source = RB_SOURCE (rb_mtp_source_new (plugin->shell, device, udi, &plugin->key_file, sync_action));
 
 	rb_shell_append_source (plugin->shell, source, NULL);
 	plugin->mtp_sources = g_list_prepend (plugin->mtp_sources, source);

@@ -43,6 +43,8 @@ typedef struct {
 	
 	GMutex *syncing;
 	
+	GtkAction *sync_action;
+	
 } RBMediaPlayerSourcePrivate;
 
 /* macro to create rb_media_player_source_get_type and set rb_media_player_source_parent_class */
@@ -82,7 +84,8 @@ static void auto_sync_cb (RhythmDB *db,
 enum
 {
 	PROP_0,
-	PROP_KEY_FILE
+	PROP_KEY_FILE,
+	PROP_SYNC_ACTION
 };
 
 static void
@@ -115,6 +118,12 @@ rb_media_player_source_class_init (RBMediaPlayerSourceClass *klass)
 							       "key-file",
 							       "Pointer to the GKeyfile",
 							       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+	g_object_class_install_property (object_class,
+					 PROP_SYNC_ACTION,
+					 g_param_spec_pointer ("sync-action",
+					 		       "sync-action",
+					 		       "The GtkAction which initiates a sync",
+					 		       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 	
 	g_type_class_add_private (klass, sizeof (RBMediaPlayerSourcePrivate));
 }
@@ -149,6 +158,10 @@ rb_media_player_source_dispose (GObject *object)
 		priv->syncing = NULL;
 	}
 	
+	if (priv->sync_action != NULL) {
+		priv->sync_action = NULL;
+	}
+	
 	G_OBJECT_CLASS (rb_media_player_source_parent_class)->dispose (object);
 }
 
@@ -169,6 +182,9 @@ rb_media_player_source_set_property (GObject *object,
 	case PROP_KEY_FILE:
 		priv->key_file = g_value_get_pointer (value);
 		break;
+	case PROP_SYNC_ACTION:
+		priv->sync_action = g_value_get_pointer (value);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
@@ -186,6 +202,9 @@ rb_media_player_source_get_property (GObject *object,
 	switch (prop_id) {
 	case PROP_KEY_FILE:
 		g_value_set_pointer (value, priv->key_file);
+		break;
+	case PROP_SYNC_ACTION:
+		g_value_set_pointer (value, priv->sync_action);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -485,6 +504,8 @@ sync_idle_cb_cleanup (RBMediaPlayerSource *source)
 	/* Set needs Update */
 	rb_media_player_prefs_set_boolean (priv->prefs, SYNC_UPDATED, FALSE);
 	
+	gtk_action_set_sensitive (priv->sync_action, TRUE);
+	
 	/* Unlock the mutex */
 	g_mutex_unlock (priv->syncing);
 	
@@ -581,6 +602,8 @@ sync_idle_cb_start (RBMediaPlayerSource *source)
 		/* Already syncing */
 		return FALSE;
 	}
+	
+	gtk_action_set_sensitive (priv->sync_action, FALSE);
 	
 	g_idle_add ((GSourceFunc)sync_idle_cb_update_sync,
 		    source);

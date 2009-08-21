@@ -267,12 +267,15 @@ create_source_cb (RBRemovableMediaManager *rmm, GMount *mount, MPIDDevice *devic
 			return NULL;
 		}
 	}
-
+	
+	GtkAction *sync_action = gtk_action_group_get_action (plugin->action_group, "iPodSourceSync");
+	
 	src = RB_SOURCE (rb_ipod_source_new (RB_PLUGIN (plugin),
 					     plugin->shell,
 					     mount,
 					     device_info,
-					     &plugin->key_file));
+					     &plugin->key_file,
+					     sync_action));
 
 	plugin->ipod_sources = g_list_prepend (plugin->ipod_sources, src);
 	g_signal_connect_object (G_OBJECT (src),

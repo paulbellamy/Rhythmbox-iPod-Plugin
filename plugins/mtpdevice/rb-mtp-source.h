@@ -56,16 +56,13 @@ typedef struct
 	RBMediaPlayerSourceClass parent;
 } RBMtpSourceClass;
 
-#if defined(HAVE_GUDEV)
 RBSource *		rb_mtp_source_new		(RBShell *shell,
 							 LIBMTP_mtpdevice_t *device,
-							 GKeyFile **key_file);
-#else
-RBSource *		rb_mtp_source_new		(RBShell *shell,
-							 LIBMTP_mtpdevice_t *device,
+#if !defined(HAVE_GUDEV)
 							 const char *udi,
-							 GKeyFile **key_file);
 #endif
+							 GKeyFile **key_file,
+							 GtkAction *sync_action);
 
 
 GType			rb_mtp_source_get_type		(void);

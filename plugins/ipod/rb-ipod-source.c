@@ -416,7 +416,8 @@ rb_ipod_source_new (RBPlugin *plugin,
 		    RBShell *shell,
 		    GMount *mount,
 		    MPIDDevice *device_info,
-		    GKeyFile **key_file)
+		    GKeyFile **key_file,
+		    GtkAction *sync_action)
 {
 	RBiPodSource *source;
 	RhythmDBEntryType entry_type;
@@ -448,11 +449,12 @@ rb_ipod_source_new (RBPlugin *plugin,
 					       "source-group", RB_SOURCE_GROUP_DEVICES,
 					       "device-info", device_info,
 					       "key-file", key_file,
+					       "sync-action", sync_action,
 					       NULL));
 
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);
         g_boxed_free (RHYTHMDB_TYPE_ENTRY_TYPE, entry_type);
-
+        
 	return RB_MEDIA_PLAYER_SOURCE (source);
 }
 

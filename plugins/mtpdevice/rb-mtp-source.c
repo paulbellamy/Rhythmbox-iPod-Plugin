@@ -549,18 +549,14 @@ impl_get_paned_key (RBBrowserSource *source)
 	return g_strdup (CONF_STATE_PANED_POSITION);
 }
 
-#if defined(HAVE_GUDEV)
 RBSource *
 rb_mtp_source_new (RBShell *shell,
 		   LIBMTP_mtpdevice_t *device,
-		   GKeyFile **key_file)
-#else
-RBSource *
-rb_mtp_source_new (RBShell *shell,
-		   LIBMTP_mtpdevice_t *device,
+#if !defined(HAVE_GUDEV)
 		   const char *udi,
-		   GKeyFile **key_file)
 #endif
+		   GKeyFile **key_file,
+		   GtkAction *sync_action)
 {
 	RBMtpSource *source = NULL;
 	RhythmDBEntryType entry_type;
@@ -588,6 +584,7 @@ rb_mtp_source_new (RBShell *shell,
 					      "udi", udi,
 #endif
 					      "key-file", key_file,
+					      "sync-action", sync_action,
 					      NULL));
 
 	rb_shell_register_entry_type_for_source (shell, RB_SOURCE (source), entry_type);

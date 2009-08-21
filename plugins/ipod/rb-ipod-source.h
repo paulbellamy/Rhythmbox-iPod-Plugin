@@ -61,7 +61,8 @@ RBMediaPlayerSource	*rb_ipod_source_new		(RBPlugin *plugin,
 							 RBShell *shell,
                                                          GMount *mount,
                                                          MPIDDevice *device_info,
-                                                         GKeyFile **key_file);
+                                                         GKeyFile **key_file,
+                                                         GtkAction *sync_action);
 GType			rb_ipod_source_get_type		(void);
 GType                   rb_ipod_source_register_type    (GTypeModule *module);
 
